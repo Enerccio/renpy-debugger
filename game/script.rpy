@@ -1,10 +1,10 @@
-﻿# The script of the game goes in this file.
+init python:
+    def test_call(x):
+        print x
 
-# Declare characters used by this game. The color argument colorizes the
-# name of the character.
+    test_call(10)
 
 define e = Character("Eileen")
-
 
 # The game starts here.
 
