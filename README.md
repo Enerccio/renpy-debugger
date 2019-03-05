@@ -4,7 +4,7 @@ Ren'Py debugger is drop in real time debugger for python code in your [Ren'Py](h
 
 ## How to use
 
-1) Include debugger module `debugger.py` and debugger initialization script `0000_debugger.rpy` in your project in `game/` folder
+1) Copy `0000_debugger.rpy`, `debugger.py` and folder `librpydb` in your project in `game/` folder
 
 2) Launch your project
 
@@ -12,9 +12,7 @@ Ren'Py debugger is drop in real time debugger for python code in your [Ren'Py](h
 
 4) Launch your debugger, set up your breakpoints and connect (see section _TUI debugger_)
 
-5) After you are done, remove both files from your `game/` folder and resume your work.
-
-6) Optionally, add both files into your build ignore, so they won't end up shipped with your final build!
+5) After you are done, remove both files and folder from your `game/` folder and resume your work.
 
 ## TUI Debugger
 

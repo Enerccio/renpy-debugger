@@ -6,7 +6,8 @@ import json
 import readline
 import traceback
 
-from debugger import DAPMessage, debugger_port
+from librpydb.protocol import DAPMessage
+from librpydb.baseconf import DEBUGGER_PORT as debugger_port
 
 class Counter(object):
     def __init__(self):
