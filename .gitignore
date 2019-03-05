@@ -1,0 +1,13 @@
+*.rpyc
+*.pyc
+*.pyo
+*.rpymc
+*.bat
+cache/
+saves/
+log.txt
+errors.txt
+traceback.txt
+game/0000_debugger.rpy
+game/debugger.py
+*dists/
