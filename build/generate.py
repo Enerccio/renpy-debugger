@@ -53,19 +53,19 @@ def generate(path):
         print("from __future__ import unicode_literals", file=t)
         print("from __future__ import absolute_import", file=t)
         print("", file=t)
-        print("from .base import DAPMessage, DAPObject", file=t)
+        print("from .base import DAPBaseMessage, DAPObject", file=t)
         print("", file=t)
         print("__undefined__ = object()", file=t)
 
-        dapmessage = Superclass("DAPMessage")
+        dapmessage = Superclass("DAPBaseMessage")
         dapmessage.determinate = []
-        supers["DAPMessage"] = dapmessage
+        supers["DAPBaseMessage"] = dapmessage
 
         for definition_name in schema["definitions"]:
             definition = schema["definitions"][definition_name]
 
             name = "DAP" + definition_name
-            base_class = "DAPMessage" if definition_name == "ProtocolMessage" else "DAPObject"
+            base_class = "DAPBaseMessage" if definition_name == "ProtocolMessage" else "DAPObject"
             description = definition["description"] if "description" in definition else ""
 
             if "allOf" in definition.keys():
@@ -91,7 +91,7 @@ def generate(path):
         print("", file=t)
         print("def _determine_root_factory(data):", file=t)
         for cls in leafs:
-            if cls.determinate is not None:
+            if cls.determinate is not None and len(cls.determinate) > 0:
                 conditions = []
                 for d in cls.determinate:
                     conditions.append("data[\"%s\"] == %s" % d)
@@ -312,13 +312,13 @@ def generate_object(t, name, base_class, description, definition, supers, all):
         if p.ref is None:
             if p.name not in required:
                 print("            if self.%s is not __undefined__:" % p.name, file=t)
-                print("                me[\"%s\"] = self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name, p.name), file=t)
+                print("                self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
             else:
-                print("            me[\"%s\"] = self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name, p.name), file=t)
+                print("            self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
         else:
             if p.name not in required:
                 print("            if self.%s is not __undefined__:" % p.name, file=t)
-                print("                me[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
+                print("                e[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
             else:
                 print("            me[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
 
