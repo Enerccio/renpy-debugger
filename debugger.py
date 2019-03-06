@@ -97,7 +97,7 @@ class DebugAdapterProtocolServer(threading.Thread):
 
                 if self._current_client is None:
                     self._ready_for_events = False
-                    return # terminated
+                    return  # terminated
 
         except BaseException as e:
             # failure while communicating
@@ -261,7 +261,7 @@ class Breakpoint(object):
                     if eval(self.eval_condition, frame.f_globals, frame.f_locals):
                         # so eval_passed is boolean not whatever eval returned, it is in separate if!
                         eval_passed = True
-                except:
+                except BaseException:
                     # eval failure, ignore
                     pass
 
@@ -445,7 +445,7 @@ class RenpyPythonDebugger(object):
                 test_breakpoints = False
                 self.stepping = SteppingMode.STEP_SINGLE_EXEC
                 self.pause_reason = "stepOut"
-                return # exit evaluation
+                return  # exit evaluation
 
             # next will always break if this is line
             if self.stepping == SteppingMode.STEP_NEXT and self.active_frame is self.stored_frames[1] and event != "call":
@@ -457,7 +457,7 @@ class RenpyPythonDebugger(object):
                 handler.pause_debugging()
 
         if event == "exception" or event == "call":
-            return # TODO: exceptions, calls
+            return  # TODO: exceptions, calls
 
         if test_breakpoints:
             # due to lock we move triggered breakpoint to here
@@ -471,7 +471,7 @@ class RenpyPythonDebugger(object):
                         break
             if breaking_on is not None:
                 print("Broke at %s %s %s (%s))" % (event, "<File %s, Line %s>" % (frame.f_code.co_filename, frame.f_lineno), str(arg), str(id(threading.current_thread()))))
-                self.break_code(breaking_on) # sets this to blocking
+                self.break_code(breaking_on)  # sets this to blocking
 
         # check for external requested pause
         if self.break_pause:
@@ -539,7 +539,7 @@ class RenpyPythonDebugger(object):
 
                 finfo["id"] = clevel
                 finfo["name"] = cframe.f_code.co_name + self.format_method_signature(cframe.f_locals, cframe.f_code)
-                finfo["source"] = {"path" : cframe.f_code.co_filename }
+                finfo["source"] = {"path": cframe.f_code.co_filename }
                 finfo["line"] = cframe.f_lineno
                 finfo["presentationHint"] = "normal"
                 finfo["column"] = 0
@@ -745,7 +745,7 @@ def wait_for_connection():
     """
 
     while not handler.is_client_attached():
-        time.sleep(10) # spinlock
+        time.sleep(10)  # spinlock
 
 
 def attach():

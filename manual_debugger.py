@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import threading
@@ -18,8 +20,10 @@ class Counter(object):
         self.state += 1
         return s
 
+
 rq_counter = Counter()
 rq_arguments = {}
+
 
 class State(object):
     @staticmethod
@@ -28,15 +32,15 @@ class State(object):
 
         if stage == 0:
             state = State()
-            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"threads"}))
+            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "threads"}))
         if stage == 1:
-            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stackTrace", "arguments": {"threadId": tid, "startFrame": 0, "levels": 0}}))
+            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "stackTrace", "arguments": {"threadId": tid, "startFrame": 0, "levels": 0}}))
 
     @staticmethod
     def load_scopes():
         global state
 
-        DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"scopes", "arguments": {"frameId": state.active_stack}}))
+        DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "scopes", "arguments": {"frameId": state.active_stack}}))
 
     def __init__(self):
         self.threads = []
@@ -50,11 +54,11 @@ class State(object):
         if vref not in self.vars:
             sq = rq_counter.get()
             rq_arguments[sq] = vref
-            DAPMessage.send_text(s, json.dumps({"seq": sq, "command":"variables", "arguments": {"variablesReference": vref}}))
+            DAPMessage.send_text(s, json.dumps({"seq": sq, "command": "variables", "arguments": {"variablesReference": vref}}))
         while vref not in self.vars:
             pass
         if self.vars[vref] is None:
-            print "Error retrieving variable %s" % str(vref)
+            print("Error retrieving variable %s" % str(vref))
             del self.vars[vref]
             return
 
@@ -68,7 +72,7 @@ class State(object):
             if len(v["value"]) > 60:
                 # move to new line
                 "#%s: %s (%s)=\n  %s"
-            print fmt % (str(v["variablesReference"]), str(v["name"]), str(v["type"]), str(v["value"]))
+            print(fmt % (str(v["variablesReference"]), str(v["name"]), str(v["type"]), str(v["value"])))
 
 
 class StackTraceElement(object):
@@ -99,14 +103,14 @@ class PrintingDAPMessage(threading.Thread):
                 # print request
 
                 if request is None:
-                    print "Disconnected"
+                    print("Disconnected")
                     return
 
                 if request["type"] == "response" and not request["success"]:
                     if int(request["request_seq"]) in rq_arguments:
                         parent_varref = rq_arguments[int(request["request_seq"])]
                         self.vars[vref] = None
-                    print request["type"]["message"], request["type"]["body"]["error"]
+                    print(request["type"]["message"], request["type"]["body"]["error"])
                 elif request["type"] == "event":
                     if request["event"] == "stopped":
                         print "Stopped (" + request["body"]["reason"] + ")", request["body"]["description"]
@@ -150,6 +154,7 @@ class PrintingDAPMessage(threading.Thread):
         finally:
             s = None
 
+
 s = None
 in_wait = False
 state = None
@@ -172,14 +177,14 @@ def mk_breakpoints():
     breakpoint_requests = []
     for source in source_map:
         req = {}
-        req["seq"] = rq_counter.get() # renpy debugger ignores seq anyways, but tries to be correct
+        req["seq"] = rq_counter.get()  # renpy debugger ignores seq anyways, but tries to be correct
         req["command"] = "setBreakpoints"
         args = {}
         req["arguments"] = args
-        args["source"] = { "path": source }
+        args["source"] = {"path": source}
         args["breakpoints"] = [{"line": l} for l in source_map[source]]
 
-        display = "Installed breakpoints %s for source %s" %(str(source_map[source]), source)
+        display = "Installed breakpoints %s for source %s" % (str(source_map[source]), source)
 
         breakpoint_requests.append((req, display))
 
@@ -189,65 +194,65 @@ def mk_breakpoints():
 while True:
     try:
         data = raw_input("")
-        print ""
+        print("")
 
         # always active commands
         if data == "h" or data == "help":
             #########
-            #### Help
+            # Help
             #########
-            print "Available commands:"
-            print "connect - connects to debugged renpy game on port 14711"
-            print "  will automatically sync breakpoints"
-            print "disconnect - stops debugging, but can still be attached later"
-            print "b - sets the breakpoint: b game/script.rpy:10"
-            print "rb - removes breakpoint - arguments can be source, source:line or nothing -> removes all"
-            print "lb - lists breakpoints"
-            print "sb - synchronized breakpoints"
-            print "threads - lists threads, renpy only supports thread 0"
-            print "bt - shows backtrace of thread"
-            print "st - st # - switch to stack frame #"
-            print "bytet - shows bytecode of current frame"
-            print "locals - shows all local variables"
-            print "globals - shows all global variables"
-            print "v # - displays subfields of variable #"
-            print "c - continue (with the) execution"
-            print "p - pauses execution wherever it is"
-            print "s - moves execution by next step"
-            print "si - moves execution into function call"
-            print "so - moves execution out of call"
-            print "OK"
+            print("Available commands:")
+            print("connect - connects to debugged renpy game on port 14711")
+            print("  will automatically sync breakpoints")
+            print("disconnect - stops debugging, but can still be attached later")
+            print("b - sets the breakpoint: b game/script.rpy:10")
+            print("rb - removes breakpoint - arguments can be source, source:line or nothing -> removes all")
+            print("lb - lists breakpoints")
+            print("sb - synchronized breakpoints")
+            print("threads - lists threads, renpy only supports thread 0")
+            print("bt - shows backtrace of thread")
+            print("st - st # - switch to stack frame #")
+            print("bytet - shows bytecode of current frame")
+            print("locals - shows all local variables")
+            print("globals - shows all global variables")
+            print("v # - displays subfields of variable #")
+            print("c - continue (with the) execution")
+            print("p - pauses execution wherever it is")
+            print("s - moves execution by next step")
+            print("si - moves execution into function call")
+            print("so - moves execution out of call")
+            print("OK")
 
 
         elif data.startswith("b "):
             #######################
-            #### Install breakpoint
+            # Install breakpoint
             #######################
             try:
                 file, line = data[2:].split(":")
                 breakpoints.add((file, int(line)))
-                print "OK"
-            except:
-                print "Failed to insert breakpoint, check syntax"
+                print("OK")
+            except BaseException:
+                print("Failed to insert breakpoint, check syntax")
 
         elif data == "lb":
             #####################
-            #### List breakpoints
+            # List breakpoints
             #####################
             for breakpoint_request, display in mk_breakpoints():
                 print display
-            print "OK"
+            print("OK")
 
         elif data.startswith("rb"):
             #######################
-            #### Remove breakpoints
+            # Remove breakpoints
             #######################
             if data == "rb":
                 for bksrc, bkline in breakpoints:
                     removed.add((bksrc, bkline))
 
                 breakpoints.clear()
-                print "All breakpoints removed"
+                print("All breakpoints removed")
             else:
                 rest = data[3:]
                 if ":" in rest:
@@ -256,23 +261,23 @@ while True:
                         if bksrc == file and bkline == line:
                             breakpoints.remove((bksrc, bkline))
                             removed.add((bksrc, bkline))
-                            print "Removed breakpoint %s:%s" %(str(bksrc), str(bkline))
+                            print("Removed breakpoint %s:%s" %(str(bksrc), str(bkline)))
                             break
                 else:
                     ab = set()
                     for bksrc, bkline in breakpoints:
                         if bksrc == rest:
-                            print "Removed breakpoint %s:%s" %(str(bksrc), str(bkline))
+                            print("Removed breakpoint %s:%s" %(str(bksrc), str(bkline)))
                             removed.add((bksrc, bkline))
                         else:
                             ab.add((bksrc, bkline))
                     breakpoints = ab
-            print "Don't forget to 'sb' to synchronize breakpoints!"
-            print "OK"
+            print("Don't forget to 'sb' to synchronize breakpoints!")
+            print("OK")
 
         elif data.startswith("{"):
             #######################
-            #### Raw request
+            # Raw request
             #######################
             DAPMessage.send_text(s, data)
             print "OK"
@@ -281,85 +286,85 @@ while True:
             # no connection commands
             if data == "connect":
                 #############################
-                #### Connect to debugged game
+                # Connect to debugged game
                 #############################
-                print "Establishing connection"
+                print("Establishing connection")
 
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.connect(("127.0.0.1", debugger_port))
                     PrintingDAPMessage(s)
                 except:
-                    print "Failed. Is renpy debugged game running?"
+                    print("Failed. Is renpy debugged game running?")
                     s = None
                     continue
 
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"initialize"}))
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "initialize"}))
                 for breakpoint_request, display in mk_breakpoints():
                     DAPMessage.send_text(s, json.dumps(breakpoint_request))
                     print display
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"configurationDone"}))
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"launch"}))
-                print "Connected!"
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "configurationDone"}))
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "launch"}))
+                print("Connected!")
+                print("OK")
 
         else:
             # connected
             if data == "sb":
                 ############################
-                #### Synchronize breakpoints
+                # Synchronize breakpoints
                 ############################
                 for breakpoint_request, display in mk_breakpoints():
                     DAPMessage.send_text(s, json.dumps(breakpoint_request))
                     print display
-                print "OK"
+                print("OK")
 
             elif data == "threads" and state is not None:
                 #################
-                #### List threads
+                # List threads
                 #################
                 print "Threads:"
                 for t in state.threads:
                     print "Threads #%s: %s" % (str(t[0]), t[1])
-                print "OK"
+                print("OK")
 
             elif data.startswith("bt") and state is not None:
                 ###################
-                #### Show backtrace
+                # Show backtrace
                 ###################
                 try:
                     if data == "bt":
                         thread_id = "0"
                     else:
                         thread_id = data[3:]
-                    print "Backtrace for thread [%s]" % thread_id
+                    print("Backtrace for thread [%s]" % thread_id)
 
                     if thread_id not in state.stacks:
-                        print "No thread %s available" % thread_id
+                        print("No thread %s available" % thread_id)
                     else:
                         for st in state.stacks[thread_id]:
-                            print "#%s: <%s:%s> %s " % (st.id, st.source, str(st.line), st.name)
-                    print "OK"
-                except:
-                    print "Failed to display bt, check syntax"
+                            (print "#%s: <%s:%s> %s " % (st.id, st.source, str(st.line), st.name))
+                    print("OK")
+                except BaseException:
+                    print("Failed to display bt, check syntax")
 
             elif data.startswith("bytet") and state is not None:
                 #############################
-                #### List bytecode for method
+                # List bytecode for method
                 #############################
                 st = state.stacks["0"][state.active_stack]
-                print "Bytecode of stack frame #%s: <%s:%s> %s  "  % (st.id, st.source, str(st.line), st.name)
+                print("Bytecode of stack frame #%s: <%s:%s> %s  "  % (st.id, st.source, str(st.line), st.name))
                 i = 0
                 for bytecode in st.sselements:
                     if i == st.bytepos:
-                        print "* ",
-                    print bytecode
+                        print ("* ", end="")
+                    print (bytecode)
                     i += 1
-                print "OK"
+                print("OK")
 
             elif (data == "st" or data.startswith("st ")) and state is not None:
                 #######################
-                #### Switch stack frame
+                # Switch stack frame
                 #######################
                 if data == "st":
                     state.active_stack = 0
@@ -371,96 +376,96 @@ while True:
                     try:
                         state.active_stack = int(data[3:])
                         if state.active_stack >= len(state.stacks["0"]):
-                            print "Invalid stack frame number, set to " + str(len(state.stacks["0"]) - 1)
+                            print("Invalid stack frame number, set to " + str(len(state.stacks["0"]) - 1))
                             state.active_stack = len(state.stacks["0"]) - 1
                         state.locs = None
                         state.globs = None
                         state.vars = {}
                         State.load_scopes()
-                    except:
-                        print "Failed to set active stack frame, check syntax"
+                    except BaseException:
+                        print("Failed to set active stack frame, check syntax")
                 st = state.stacks["0"][state.active_stack]
-                print "Set stack to #%s: <%s:%s> %s  "  % (st.id, st.source, str(st.line), st.name)
-                print "OK"
+                print("Set stack to #%s: <%s:%s> %s  " % (st.id, st.source, str(st.line), st.name))
+                print("OK")
 
             elif data == "locals" and state is not None:
                 ###################
-                #### Display locals
+                # Display locals
                 ###################
                 state.load_variable(state.locs["variablesReference"])
                 state.print_variable(state.locs["variablesReference"])
-                print "OK"
+                print("OK")
 
             elif data == "globals" and state is not None:
                 ####################
-                #### Display globals
+                # Display globals
                 ####################
                 state.load_variable(state.globs["variablesReference"])
                 state.print_variable(state.globs["variablesReference"])
-                print "OK"
+                print("OK")
 
             elif data.startswith("v "):
                 ###############################
-                #### Display variable structure
+                # Display variable structure
                 ###############################
                 try:
                     varRef = int(data[2:])
-                except:
-                    print "Failed to get variable, check syntax"
+                except BaseException:
+                    print("Failed to get variable, check syntax")
                 else:
                     state.load_variable(varRef)
                     state.print_variable(varRef)
-                    print "OK"
+                    print("OK")
 
             elif data.startswith("c") and in_wait:
                 #######################
-                #### Continue execution
+                # Continue execution
                 #######################
                 state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"continue", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "continue", "arguments": {"threadId": 0}}))
+                print("OK")
 
             elif data.startswith("p") and not in_wait:
                 ####################
-                #### Pause execution
+                # Pause execution
                 ####################
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"pause", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "pause", "arguments": {"threadId": 0}}))
+                print("OK")
 
             elif data == "s" and in_wait:
                 ###################
-                #### Step execution
+                # Step execution
                 ###################
                 state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"next", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "next", "arguments": {"threadId": 0}}))
+                print("OK")
 
             elif data == "si" and in_wait:
                 ###################
-                #### Step into exec
+                # Step into exec
                 ###################
                 state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stepIn", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "stepIn", "arguments": {"threadId": 0}}))
+                print("OK")
 
             elif data == "so" and in_wait:
                 ##################
-                #### Step out exec
+                # Step out exec
                 ##################
                 state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stepOut", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "stepOut", "arguments": {"threadId": 0}}))
+                print("OK")
 
             elif data == "disconnect":
                 ###############
-                #### Disconnect
+                # Disconnect
                 ###############
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"disconnect", "arguments":{"threadId":0}}))
-                print "OK"
+                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command": "disconnect", "arguments": {"threadId": 0}}))
+                print("OK")
 
     except BaseException as e:
         if isinstance(e, KeyboardInterrupt):
             break
 
-        print "Oops, something went wrong."
+        print("Oops, something went wrong.")
         traceback.print_exc()
