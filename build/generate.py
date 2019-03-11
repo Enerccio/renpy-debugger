@@ -58,6 +58,7 @@ def generate(path):
         print("from __future__ import absolute_import", file=t)
         print("", file=t)
         print("from .base import DAPBaseMessage, DAPObject", file=t)
+        print("from ..utils import _fix_all", file=t)
         print("", file=t)
         print("__undefined__ = object()", file=t)
 
@@ -110,7 +111,7 @@ def generate(path):
 
         print("", file=t)
         print("", file=t)
-        print("__all__ = %s" % str(list(all)), file=t)
+        print("__all__ = _fix_all(%s)" % str(list(all)), file=t)
 
         with open(path, "wb") as res:
             res.write(t.getvalue().encode("utf-8"))
