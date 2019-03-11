@@ -15,6 +15,7 @@ class Property(object):
 
         self.default = None
         self.ref = None
+        self.arrayref = None
         self.desc = "None"
 
         self.subproperty = False
@@ -31,6 +32,9 @@ class Superclass(object):
         self.constargs = {}
         self.determinate = None
         self.parent = None
+
+    def merge(self, other):
+        self.constargs.update(other.constargs)
 
 
 def to_snake(name):
@@ -89,6 +93,7 @@ def generate(path):
 
         print("", file=t)
         print("", file=t)
+        print("@staticmethod", file=t)
         print("def _determine_root_factory(data):", file=t)
         for cls in leafs:
             if cls.determinate is not None and len(cls.determinate) > 0:
@@ -136,6 +141,10 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                     p.ref = name + property_name.capitalize()
                     generate_object(p.property, p.ref,
                                     "DAPObject", p.desc, prop, supers, all)
+
+                if prop["type"] == "array" and "$ref" in prop["items"]:
+                    ref = prop["items"]["$ref"]
+                    p.arrayref = "DAP" + ref[ref.rfind("/") + 1:]
             else:
                 ref = prop["$ref"]
                 p.ref = "DAP" + ref[ref.rfind("/") + 1:]
@@ -172,7 +181,6 @@ def generate_object(t, name, base_class, description, definition, supers, all):
             if p.enum is not None:
                 me.determinate.append((p.name, p.enum))
 
-
     if supercls is not None:
         for sarg in supercls.named:
             arguments.append(to_snake(sarg))
@@ -187,6 +195,7 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                     if p.name in required and p.name == sarg and p.enum is not None:
                         found = True
                         full_list_seq.append(p.enum)
+                        me.constargs[sarg] = p.enum
                         break
 
                 if not found:
@@ -273,6 +282,18 @@ def generate_object(t, name, base_class, description, definition, supers, all):
     if "additionalProperties" in definition:
         print("        self.additionalProperties = kwargs", file=t)
 
+    print("    ", file=t)
+    print("    def as_current_kwargs(self):", file=t)
+    print("        kwargs = {}", file=t)
+    for p in properties:
+        if p.name in required:
+            print("        kwargs[\"%s\"] = self.get_%s()" % (p.name, to_snake(p.name)), file=t)
+    for p in properties:
+        if p.name not in required:
+            print("        if self.has_%s():" % to_snake(p.name), file=t)
+            print("            kwargs[\"%s\"] = self.get_%s()" % (p.name, to_snake(p.name)), file=t)
+    print("        return kwargs", file=t)
+
     for p in properties:
         if p in used_args:
             print("    ", file=t)
@@ -287,6 +308,11 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                 print("    def get_%s(self):" % to_snake(p.name), file=t)
                 print("        if self.%s is __undefined__:" % p.name, file=t)
                 print("            raise ValueError(\"%s is not defined\")" % p.name, file=t)
+                print("        return self.%s" % p.name, file=t)
+                print("    ", file=t)
+                print("    def get_%s_or_defaut(self, default=None):" % to_snake(p.name), file=t)
+                print("        if self.%s is __undefined__:" % p.name, file=t)
+                print("            return default", file=t)
                 print("        return self.%s" % p.name, file=t)
                 print("    ", file=t)
                 print("    def has_%s(self):" % to_snake(p.name), file=t)
@@ -312,13 +338,16 @@ def generate_object(t, name, base_class, description, definition, supers, all):
         if p.ref is None:
             if p.name not in required:
                 print("            if self.%s is not __undefined__:" % p.name, file=t)
-                print("                self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
+                if p.arrayref is not None:
+                    print("                self.serialize_scalar(me, \"%s\", self.%s, hint=%s)" % (p.name, p.name, p.arrayref), file=t)
+                else:
+                    print("                self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
             else:
                 print("            self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
         else:
             if p.name not in required:
                 print("            if self.%s is not __undefined__:" % p.name, file=t)
-                print("                e[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
+                print("                me[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
             else:
                 print("            me[\"%s\"] = self.%s.serialize()" % (p.name, p.name), file=t)
 
@@ -341,27 +370,34 @@ def generate_object(t, name, base_class, description, definition, supers, all):
         print("            used_args.append(\"%s\")" % p.name, file=t)
         if p.ref is None:
             if p.name not in required:
-                print("            if \"%s\" in me:" % p.name, file=t)
-                print("                kwargs[\"%s\"] = cls.deserialize_scalar(me[\"%s\"])" % (p.name, p.name), file=t)
+                print("            if me is not None and \"%s\" in me:" % p.name, file=t)
+                if p.arrayref is not None:
+                    print("                kwargs[\"%s\"] = cls.deserialize_scalar(me[\"%s\"], hint=%s)" % (to_snake(p.name), p.name, p.arrayref), file=t)
+                else:
+                    print("                kwargs[\"%s\"] = cls.deserialize_scalar(me[\"%s\"])" % (to_snake(p.name), p.name), file=t)
             else:
                 print("            args.append(cls.deserialize_scalar(me[\"%s\"]))" % p.name, file=t)
         else:
             if p.name not in required:
-                print("            if self.%s is not __undefined__:" % p.name, file=t)
-                print("                kwargs[\"%s\"] = cls.deserialize_as(me[\"%s\"], %s)" % (p.name, p.name, p.ref), file=t)
+                print("            if me is not None and \"%s\" in me:" % p.name, file=t)
+                print("                kwargs[\"%s\"] = cls.deserialize_as(me[\"%s\"], %s)" % (to_snake(p.name), p.name, p.ref), file=t)
             else:
                 print("            args.append(cls.deserialize_as(me[\"%s\"], %s))" % (p.name, p.ref), file=t)
 
     if me.additional_properties:
         print("        # additionalProperties", file=t)
-        print("        for key in me:", file=t)
-        print("            if key not in used_args:", file=t)
-        print("                kwargs[key] = cls.deserialize_scalar(me[key])", file=t)
+        print("        if me is not None:", file=t)
+        print("            for key in me:", file=t)
+        print("                if key not in used_args:", file=t)
+        print("                    kwargs[key] = cls.deserialize_scalar(me[key])", file=t)
 
 
     for p in properties:
         if p.subproperty:
             print("%s" % p.property.getvalue(), file=t)
+
+    if supercls is not None:
+        me.merge(supercls)
 
 
 if __name__ == "__main__":
