@@ -16,7 +16,7 @@ Ren'Py debugger is drop in real time debugger for python code in your [Ren'Py](h
 
 ## TUI Debugger
 
-Right now, graphical debugger is work-in-progress, but you can use text user interface debugger. Simply launch it with `python manual_debugger.py` or `python2 manual_debugger.py` if you are under archlinux.
+Right now, graphical debugger is work-in-progress, but you can use text user interface debugger. Simply launch it with `python manual_debugger.py`.
 
 Typing help will list all available commands:
 
@@ -31,7 +31,6 @@ sb - synchronized breakpoints
 threads - lists threads, renpy only supports thread 0
 bt - shows backtrace of thread
 st - st # - switch to stack frame #
-bytet - shows bytecode of current frame
 locals - shows all local variables
 globals - shows all global variables
 v # - displays subfields of variable #
@@ -45,22 +44,23 @@ so - moves execution out of call
 ### Example usage:
 
 ```
-$ python2 manual_debugger.py
+$ python manual_debugger.py
 b game/script.rpy:3
 
 OK
 connect
+connect
 
 Establishing connection
-Installed breakpoints set([3]) for source game/script.rpy
-Connected!
 OK
-Stopped (breakpoint) game/script.rpy:3
-bt
+>>> Paused for breakpoint (game/script.rpy:3)
+
+
+>>> bt
 
 Backtrace for thread [0]
 #0: <game/script.rpy:3> test_call(x)
-#1: <game/script.rpy:5> <module>()
+#1: <game/script.rpy:6> <module>()
 #2: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
 #3: </opt/renpy/renpy/ast.py:896> execute(self)
 #4: </opt/renpy/renpy/execution.py:553> run(self, node)
@@ -69,45 +69,224 @@ Backtrace for thread [0]
 #7: </opt/renpy/renpy.py:195> main()
 #8: </opt/renpy/renpy.py:198> <module>()
 OK
-locals
-
-#2: x (<type 'int'>)=10
-OK
-bytet
-
-Bytecode of stack frame #0: <game/script.rpy:3> test_call(x)  
-*  0 [LOAD_FAST] (0, x)
-3 [PRINT_ITEM]
-4 [PRINT_NEWLINE]
-5 [LOAD_CONST] (0, None)
-8 [RETURN_VALUE]
-OK
-so
+>>> s
 
 OK
-Stopped (stepOut) game/script.rpy:5
-bt
+>>> Paused for step (game/script.rpy:4)
+
+
+>>> si
+
+OK
+>>> Paused for step (game/script.rpy:4)
+
+
+>>> bt
 
 Backtrace for thread [0]
-#0: <game/script.rpy:5> <module>()
-#1: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
-#2: </opt/renpy/renpy/ast.py:896> execute(self)
-#3: </opt/renpy/renpy/execution.py:553> run(self, node)
-#4: </opt/renpy/renpy/main.py:430> main()
-#5: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
-#6: </opt/renpy/renpy.py:195> main()
-#7: </opt/renpy/renpy.py:198> <module>()
+#0: <game/script.rpy:4> test_call(x)
+#1: <game/script.rpy:6> <module>()
+#2: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#3: </opt/renpy/renpy/ast.py:896> execute(self)
+#4: </opt/renpy/renpy/execution.py:553> run(self, node)
+#5: </opt/renpy/renpy/main.py:430> main()
+#6: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#7: </opt/renpy/renpy.py:195> main()
+#8: </opt/renpy/renpy.py:198> <module>()
 OK
-locals
+>>> si
 
-#2: ADVCharacter (<type 'type'>)=<class 'renpy.character.ADVCharacter'>
-#3: ADVSpeaker (<type 'type'>)=<class 'renpy.character.ADVCharacter'>
-#4: Action (<type 'type'>)=<class 'renpy.ui.Action'>
-...
-#526: zoomout (<class 'renpy.curry.Curry'>)=<curry <function OldMoveTransition at 0x7fecaf40b668> (0.5,) {'leave_factory': <curry <function ZoomInOut at 0x7fecaf40b578> (1.0, 0.01) {}>}>
 OK
+>>> Disconnected!
 
-^C
+
+>>> connect
+
+Establishing connection
+OK
+>>> Paused for breakpoint (game/script.rpy:3)
+
+
+>>> si
+
+OK
+>>> Paused for stepIn (/opt/renpy/renpy/log.py:225)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: </opt/renpy/renpy/log.py:225> write(self, s)
+#1: <game/script.rpy:3> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> so
+
+OK
+>>> Paused for stepOut (/opt/renpy/renpy/log.py:223)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: </opt/renpy/renpy/log.py:225> write(self, s)
+#1: <game/script.rpy:3> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> so
+
+OK
+>>> Paused for stepOut (game/script.rpy:4)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:4> test_call(x)
+#1: <game/script.rpy:21> <module>()
+#2: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#3: </opt/renpy/renpy/ast.py:896> execute(self)
+#4: </opt/renpy/renpy/execution.py:553> run(self, node)
+#5: </opt/renpy/renpy/main.py:430> main()
+#6: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#7: </opt/renpy/renpy.py:195> main()
+#8: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for stepIn (game/script.rpy:7)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:7> xxx()
+#1: <game/script.rpy:4> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for step (game/script.rpy:8)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:8> xxx()
+#1: <game/script.rpy:4> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for step (game/script.rpy:9)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:9> xxx()
+#1: <game/script.rpy:4> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for step (game/script.rpy:10)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:10> xxx()
+#1: <game/script.rpy:4> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for step (game/script.rpy:11)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:11> xxx()
+#1: <game/script.rpy:4> test_call(x)
+#2: <game/script.rpy:21> <module>()
+#3: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#4: </opt/renpy/renpy/ast.py:896> execute(self)
+#5: </opt/renpy/renpy/execution.py:553> run(self, node)
+#6: </opt/renpy/renpy/main.py:430> main()
+#7: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#8: </opt/renpy/renpy.py:195> main()
+#9: </opt/renpy/renpy.py:198> <module>()
+OK
+>>> si
+
+OK
+>>> Paused for stepIn (game/script.rpy:17)
+
+
+>>> bt
+
+Backtrace for thread [0]
+#0: <game/script.rpy:17> yyy()
+#1: <game/script.rpy:11> xxx()
+#2: <game/script.rpy:4> test_call(x)
+#3: <game/script.rpy:21> <module>()
+#4: </opt/renpy/renpy/python.py:1929> py_exec_bytecode(bytecode, hide, globals, locals, store)
+#5: </opt/renpy/renpy/ast.py:896> execute(self)
+#6: </opt/renpy/renpy/execution.py:553> run(self, node)
+#7: </opt/renpy/renpy/main.py:430> main()
+#8: </opt/renpy/renpy/bootstrap.py:313> bootstrap(renpy_base)
+#9: </opt/renpy/renpy.py:195> main()
+#10: </opt/renpy/renpy.py:198> <module>()
+OK
 ```
 
 ## Remaining information
