@@ -9,665 +9,16 @@ import traceback
 import types
 import time
 
-from opcode import *
+from librpydb.baseconf import DEBUGGER_PORT
+from librpydb.utils import NoneDict
+from librpydb.dis import dis
+from librpydb.protocol import *
 
-# main debugging port
-debugger_port = 14711
 
 # Holds the instance of renpy debugger if debug mode is on
 debugger = None
 # instance of debug handler,
 handler = None
-
-# enabled features
-features = {
-    "supportsExceptionInfoRequest": False,
-    "supportTerminateDebuggee": False,
-    "supportsTerminateThreadsRequest": False,
-    "supportsDataBreakpoints": False,
-    "supportsStepInTargetsRequest": False,
-    "supportsSetExpression": False,
-    "supportsGotoTargetsRequest": False,
-    "supportsFunctionBreakpoints": False,
-
-    # TODO
-    "supportsConditionalBreakpoints": False,
-    "supportsHitConditionalBreakpoints": False,
-}
-
-class NoneDict(dict):
-    """
-    None dict is a dict that returns None on key it does not have
-    """
-
-    def __init__(self, other):
-        for key in other:
-            self[key] = other[key]
-
-    def __getitem__(self, key):
-        if key not in self:
-            return None
-        return dict.__getitem__(self, key)
-
-
-class DAPMessage(object):
-    """
-    DAPMessage is base class for all debug adapter protocol
-    """
-
-    def __init__(self):
-        self.seq = None
-
-    def set_seq(self, seq):
-        """
-        Sets sequence number to seq
-        """
-
-        self.seq = seq
-        return self
-
-    @staticmethod
-    def recv(socket):
-        """
-        Retrieves single DAPMessage from socket
-
-        Returns None on failure
-        """
-
-        body = DAPMessage.recv_raw(socket)
-
-        if body is not None:
-            kwargs = body["arguments"]
-            if kwargs is None:
-                kwargs = {}
-            rq = DAPRequest(command=body["command"], **kwargs)
-            rq.set_seq(body["seq"])
-            return rq
-
-    @staticmethod
-    def recv_raw(socket):
-        """
-        Retrieves single DAPMessage from socket in raw form (json)
-
-        Returns None on failure
-        """
-
-        headers = []
-
-        cread_line = ""
-
-        while True:
-            c = socket.recv(1)
-            if c == "":
-                # end of stream
-                return None
-            cread_line += c
-
-            if cread_line.endswith("\r\n"):
-                if cread_line == "\r\n":
-                    break
-                else:
-                    headers.append(cread_line)
-                    cread_line = ""
-
-        headers = DAPMessage.parse_headers(headers)
-
-        content_size = int(headers["Content-Length"])
-
-        data = ""
-
-        while (len(data) < content_size):
-            data += socket.recv(content_size-len(data))
-            if data == "":
-                return None
-
-        body = json.loads(data, object_hook=NoneDict)
-        # print("RECEIVED: " + str(body))
-        return body
-
-    @staticmethod
-    def parse_headers(headers):
-        """
-        Transforms tags into dict
-        """
-
-        h = NoneDict({})
-        for hl in headers:
-            type, value = hl.split(":")
-            type = type.strip()
-            value = value.strip()
-            h[type] = value
-        return h
-
-    def send(self, socket):
-        """
-        Sends this message to client
-        """
-
-        data = self.serialize(self.seq)
-        # print("SENT: " + str(data))
-        DAPMessage.send_text(socket, data)
-
-    def serialize(self, seq):
-        """
-        Serializes this message to JSON
-        """
-
-        message = {}
-        message["seq"] = seq
-        message["type"] = self.get_type()
-
-        self.serialize_context(message)
-
-        return json.dumps(message)
-
-    def serialize_context(self, message):
-        """
-        Serializes inner body of this message
-
-        Abstract method
-        """
-
-        pass
-
-    def get_type(self):
-        """
-        Returns type of this message
-        """
-
-        raise NotImplementedError()
-
-    @staticmethod
-    def send_text(socket, text):
-        """
-        Sends the raw text message as DAPMessage
-        """
-
-        socket.sendall("Content-Length: " + str(len(text)) + "\r\n")
-        socket.sendall("\r\n")
-        socket.sendall(text)
-
-    @staticmethod
-    def remove_nones(dict):
-        """
-        Removes all Nones from dict
-        """
-
-        d = {}
-        for key in dict:
-            if dict[key] is not None:
-                d[key] = dict[key]
-        return d
-
-
-class DAPRequest(DAPMessage):
-    def __init__(self, command, **kwargs):
-        self.command = command
-        self.kwargs = DAPMessage.remove_nones(kwargs)
-
-    def serialize_context(self, message):
-        message["command"] = self.command
-        message["args"] = self.kwargs
-
-    def get_type(self):
-        return "type"
-
-
-class DAPEvent(DAPMessage):
-    def __init__(self, event):
-        self.event = event
-
-    def serialize_context(self, message):
-        message["event"] = self.event
-        self.serialize_event_context(message)
-
-    def serialize_event_context(self, message):
-        raise NotImplementedError()
-
-    def get_type(self):
-        return "event"
-
-
-class DAPResponse(DAPMessage):
-    def __init__(self, rqs, command, success=True, message=None):
-        self.rqs = rqs
-        self.command = command
-        self.success = success
-        self.message = message
-
-    def serialize_context(self, message):
-        message["request_seq"] = self.rqs
-        message["command"] = self.command
-        message["success"] = self.success
-        if self.message is not None:
-            message["success"] = self.message
-        self.serialize_response_context(message)
-
-    def serialize_response_context(self, message):
-        pass
-
-    def get_type(self):
-        return "response"
-
-
-class DAPErrorResponse(DAPResponse):
-    def __init__(self, rqs, command, message="", detailed_message=None):
-        DAPResponse.__init__(self, rqs, command, success=False, message=message)
-        self.dm = detailed_message
-
-    def serialize_response_context(self, message):
-        message["body"] = {}
-        if self.dm is not None:
-            message["body"]["error"] = self.dm
-
-
-class DAPInitializedEvent(DAPEvent):
-    def __init__(self):
-        DAPEvent.__init__(self, "initialized")
-
-    def serialize_event_context(self, message):
-        pass
-
-
-class DAPStoppedEvent(DAPEvent):
-    def __init__(self, reason, description=None, thread_id=None, preserve_focus_hint=None, text=None, all_threads_stopped=None):
-        DAPEvent.__init__(self, "stopped")
-
-        self.reason = reason
-        self.description = description
-        self.thread_id = thread_id
-        self.preserve_focus_hint = preserve_focus_hint
-        self.text = text
-        self.all_threads_stopped = all_threads_stopped
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["reason"] = self.reason
-
-        if self.description is not None:
-            body["description"] = self.description
-        if self.thread_id is not None:
-            body["threadId"] = self.thread_id
-        if self.preserve_focus_hint is not None:
-            body["preserveFocusHint"] = self.preserve_focus_hint
-        if self.text is not None:
-            body["text"] = self.text
-        if self.all_threads_stopped is not None:
-            body["allThreadsStopped"] = self.all_threads_stopped
-
-
-class DAPContinueEvent(DAPEvent):
-    def __init__(self, thread_id, all_threads_continue=None):
-        DAPEvent.__init__(self, "continued")
-
-        self.thread_id = thread_id
-        self.all_threads_continue = all_threads_continue
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["threadId"] = self.thread_id
-
-        if self.all_threads_continue is not None:
-            body["allThreadsContinued"] = self.all_threads_continue
-
-
-class DAPExitedEvent(DAPEvent):
-    def __init__(self, ec):
-        DAPEvent.__init__(self, "exited")
-
-        self.ec = ec
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["exitCode"] = self.ec
-
-
-class DAPTerminatedEvent(DAPEvent):
-    def __init__(self, restart=None):
-        DAPEvent.__init__(self, "terminated")
-
-        self.restart = restart
-
-    def serialize_event_context(self, message):
-        if self.restart is not None:
-            body = {}
-            message["body"] = body
-
-            body["restart"] = self.restart
-
-
-class DAPThreadEvent(DAPEvent):
-    def __init__(self, reason, thread_id):
-        DAPEvent.__init__(self, "thread")
-
-        self.reason = reason
-        self.thread_id = thread_id
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["reason"] = self.reason
-        body["threadId"] = self.thread_id
-
-
-class DAPOutputEvent(DAPEvent):
-    def __init__(self, output, category=None, variables_reference=None, source=None, line=None, column=None, data=None):
-        DAPEvent.__init__(self, "output")
-
-        self.output = output
-        self.category = category
-        self.variables_reference = variables_reference
-        self.source = source
-        self.line = line
-        self.column = column
-        self.data = data
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        if self.category is not None:
-            body["category"] = self.category
-
-        body["output"] = self.output
-
-        if self.variables_reference is not None:
-            body["variablesReference"] = self.variables_reference
-
-        if self.source is not None:
-            body["source"] = self.source
-
-        if self.line is not None:
-            body["line"] = self.line
-
-        if self.column is not None:
-            body["column"] = self.column
-
-        if self.data is not None:
-            body["data"] = self.data
-
-
-class DAPBreakpointEvent(DAPEvent):
-    def __init__(self, reason, breakpoint):
-        DAPEvent.__init__(self, "breakpoint")
-
-        self.reason = reason
-        self.breakpoint = breakpoint
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["reason"] = self.reason
-        body["breakpoint"] = self.breakpoint
-
-
-class DAPModuleEvent(DAPEvent):
-    def __init__(self, reason, module):
-        DAPEvent.__init__(self, "module")
-
-        self.reason = reason
-        self.module = module
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["reason"] = self.reason
-        body["module"] = self.module
-
-
-class DAPLoadedSourceEvent(DAPEvent):
-    def __init__(self, reason, source):
-        DAPEvent.__init__(self, "loadedSource")
-
-        self.reason = reason
-        self.source = source
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["reason"] = self.reason
-        body["source"] = self.source
-
-
-class DAPProcessEvent(DAPEvent):
-    def __init__(self, name, process_id=None, is_local=None, start_method=None):
-        DAPEvent.__init__(self, "process")
-
-        self.name = name
-        self.process_id = process_id
-        self.is_local = is_local
-        self.start_method = start_method
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["name"] = self.name
-
-        if self.process_id is not None:
-            body["systemProcessId"] = self.process_id
-
-        if self.is_local is not None:
-            body["isLocalProcess"] = self.is_local
-
-        if self.start_method is not None:
-            body["startMethod"] = self.start_method
-
-
-class DAPCapabilitiesEvent(DAPEvent):
-    def __init__(self, capabilities):
-        DAPEvent.__init__(self, "capabilities")
-
-        self.capabilities = capabilities
-
-    def serialize_event_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["capabilities"] = self.capabilities
-
-
-class DAPRunInTerminalRequest(DAPRequest):
-    def __init__(self, cwd, args, kind=None, title=None, env=None):
-        DAPRequest.__init__(self, "runInTerminal", kind, title, cwd, args, env)
-
-
-class DAPRunInTerminalResponse(DAPResponse):
-    def __init__(self, rqs, process_id=None, shell_process_id=None):
-        DAPResponse.__init__(self, rqs, "runInTerminal")
-        self.process_id = process_id
-        self.shell_process_id = shell_process_id
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        if self.process_id is not None:
-            body["processId"] = self.process_id
-
-        if self.shell_process_id is not None:
-            body["shellProcessId"] = self.shell_process_id
-
-
-### ONLY SUPPORTED RESPONSES (and thus requests) ARE IMPLEMENTED!
-
-class DAPSetBreakpointsResponse(DAPResponse):
-    def __init__(self, rqs, breakpoints):
-        DAPResponse.__init__(self, rqs, "setBreakpoints")
-        self.breakpoints = breakpoints
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["breakpoints"] = self.breakpoints
-
-
-class DAPSetFunctionBreakpointsResponse(DAPResponse):
-    def __init__(self, rqs, breakpoints):
-        DAPResponse.__init__(self, rqs, "setFunctionBreakpoints")
-        self.breakpoints = breakpoints
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["breakpoints"] = self.breakpoints
-
-
-class DAPContinueResponse(DAPResponse):
-    def __init__(self, rqs, all_threads_continue=None):
-        DAPResponse.__init__(self, rqs, "continue")
-        self.all_threads_continue = all_threads_continue
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        if self.all_threads_continue is not None:
-            body["allThreadsContinued"] = self.all_threads_continue
-
-# next has no special response
-
-# step has no special response
-
-# step out has no special response
-
-# pause has no special response
-
-class DAPInitializeResponse(DAPResponse):
-    def __init__(self, rqs, capabilities):
-        DAPResponse.__init__(self, rqs, "initialize")
-        self.capabilities = capabilities
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = self.capabilities
-
-
-class DAPStackTraceResponse(DAPResponse):
-    def __init__(self, rqs, stack_frames):
-        DAPResponse.__init__(self, rqs, "stackTrace")
-        self.stack_frames = stack_frames
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["stackFrames"] = self.stack_frames
-        body["totalFrames"] = len(self.stack_frames)
-
-
-class DAPScopesResponse(DAPResponse):
-    def __init__(self, rqs, scopes):
-        DAPResponse.__init__(self, rqs, "scopes")
-        self.scopes = scopes
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["scopes"] = self.scopes
-
-
-class DAPVariablesResponse(DAPResponse):
-    def __init__(self, rqs, variables):
-        DAPResponse.__init__(self, rqs, "variables")
-        self.variables = variables
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["variables"] = self.variables
-
-
-class DAPSetVariableResponse(DAPResponse):
-    def __init__(self, rqs, value, type=None, variables_reference=None, named_variables=None, indexed_variables=None):
-        DAPResponse.__init__(self, rqs, "setVariable")
-        self.value = value
-        self.type = type
-        self.variables_reference = variables_reference
-        self.named_variables = named_variables
-        self.indexed_variables = indexed_variables
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["value"] = self.value
-        if self.type is not None:
-            body["type"] = self.type
-        if self.variables_reference is not None:
-            body["variablesReference"] = self.variables_reference
-        if self.named_variables is not None:
-            body["namedVariables"] = self.named_variables
-        if self.indexed_variables is not None:
-            body["indexedVariables"] = self.indexed_variables
-
-
-class DAPSourceResponse(DAPResponse):
-    def __init__(self, rqs, source, mime_type=None):
-        DAPResponse.__init__(self, rqs, "source")
-        self.source = source
-        self.mime_type = mime_type
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["source"] = self.source
-        if self.mime_type is not None:
-            body["mimeType"] = self.mime_type
-
-
-class DAPThreadsResponse(DAPResponse):
-    def __init__(self, rqs, threads):
-        DAPResponse.__init__(self, rqs, "threads")
-        self.threads = threads
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["threads"] = self.threads
-
-
-class DAPEvaluateResponse(DAPResponse):
-    def __init__(self, rqs, result, type=None, presentation_hint=None, variables_reference=None, named_variables=None, indexed_variables=None):
-        DAPResponse.__init__(self, rqs, "evaluate")
-        self.result = result
-        self.type = type
-        self.presentation_hint = presentation_hint
-        self.variables_reference = variables_reference
-        self.named_variables = named_variables
-        self.indexed_variables = indexed_variables
-
-    def serialize_response_context(self, message):
-        body = {}
-        message["body"] = body
-
-        body["value"] = self.value
-        if self.type is not None:
-            body["type"] = self.type
-        if self.presentation_hint is not None:
-            body["presentationHint"] = self.presentation_hint
-        if self.variables_reference is not None:
-            body["variablesReference"] = self.variables_reference
-        if self.named_variables is not None:
-            body["namedVariables"] = self.named_variables
-        if self.indexed_variables is not None:
-            body["indexedVariables"] = self.indexed_variables
 
 
 class DebugAdapterProtocolServer(threading.Thread):
@@ -697,7 +48,7 @@ class DebugAdapterProtocolServer(threading.Thread):
         Starts the handler server
         """
 
-        listen_port = debugger_port if "RENPY_DEBUGGER_PORT" not in os.environ else os.environ["RENPY_DEBUGGER_PORT"]
+        listen_port = DEBUGGER_PORT if "RENPY_DEBUGGER_PORT" not in os.environ else os.environ["RENPY_DEBUGGER_PORT"]
 
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -714,7 +65,7 @@ class DebugAdapterProtocolServer(threading.Thread):
         """
 
         self._current_client = csocket
-        self.next_seq = 0
+        self.next_seq = -1
 
         # manual requests
 
@@ -728,7 +79,7 @@ class DebugAdapterProtocolServer(threading.Thread):
         try:
             while True:
                 try:
-                    request = DAPMessage.recv(self._current_client)
+                    request = DAPBaseMessage.recv(self._current_client)
                 except Exception as e:
                     # TODO send error
                     traceback.print_exc()
@@ -742,11 +93,13 @@ class DebugAdapterProtocolServer(threading.Thread):
                 except Exception as e:
                     # TODO send error
                     traceback.print_exc()
+                    self.next_seq += 1
+                    DAPErrorResponse.create(self.next_seq, rq.seq, False, message="Error").send(self._current_client)
                     continue
 
                 if self._current_client is None:
                     self._ready_for_events = False
-                    return # terminated
+                    return  # terminated
 
         except BaseException as e:
             # failure while communicating
@@ -766,93 +119,102 @@ class DebugAdapterProtocolServer(threading.Thread):
         Resolves the message from client, changing debug state as appropriate, returning responses
         """
 
-        if rq.command == "initialize":
-            DAPInitializeResponse(rq.seq, features).set_seq(self.next_seq).send(self._current_client)
+        print("%s %s" % (rq.command, str(type(rq.command))))
+
+        if rq.command == u"initialize":
             self.next_seq += 1
-            DAPInitializedEvent().set_seq(self.next_seq).send(self._current_client)
+            DAPInitializeResponse.create(self.next_seq, rq.seq, True, rq.command, body=DAPCapabilities.create(**features)).send(self._current_client)
             self.next_seq += 1
-        elif rq.command == "setBreakpoints":
-            bkps = self.create_breakpoints(**rq.kwargs)
+            DAPInitializedEvent.create(self.next_seq).send(self._current_client)
+        elif rq.command == u"setBreakpoints":
             self.next_seq += 1
-            DAPSetBreakpointsResponse(rq.seq, [b.serialize() for b in bkps]).set_seq(self.next_seq).send(self._current_client)
+            bkps = self.create_breakpoints(**rq.get_arguments().as_current_kwargs())
+            body = DAPSetBreakpointsResponseBody.create([b.serialize() for b in bkps])
+            DAPSetBreakpointsResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
+        elif rq.command == u"configurationDone":
             self.next_seq += 1
-        elif rq.command == "configurationDone":
-            DAPResponse(rq.seq, "configurationDone").set_seq(self.next_seq).send(self._current_client)
-            self.next_seq += 1
-            self._ready_for_events = True
-        elif rq.command == "launch":
+            DAPConfigurationDoneResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
+        elif rq.command == u"launch":
             # no special noDebug
-            DAPResponse(rq.seq, "launch").set_seq(self.next_seq).send(self._current_client)
             self.next_seq += 1
-        elif rq.command == "disconnect":
-            DAPResponse(rq.seq, "disconnect").set_seq(self.next_seq).send(self._current_client)
+            DAPLaunchResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
+            self._ready_for_events = True
+        elif rq.command == u"disconnect":
             self.next_seq += 1
+            DAPDisconnectResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             self._current_client.close()
             self._current_client = None
             return
-        elif rq.command == "continue":
-            DAPContinueResponse(rq.seq, all_threads_continue=True).set_seq(self.next_seq).send(self._current_client)
+        elif rq.command == u"continue":
             self.next_seq += 1
+            body = DAPContinueResponseBody.create(all_threads_continued=True)
+            DAPContinueResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
             debugger.stepping = SteppingMode.STEP_NO_STEP
             debugger.continue_next()
-        elif rq.command == "threads":
-            DAPThreadsResponse(rq.seq, [{"id": 0, "name": "renpy_main"}]).set_seq(self.next_seq).send(self._current_client)
+        elif rq.command == u"threads":
             self.next_seq += 1
-        elif rq.command == "stackTrace":
-            DAPStackTraceResponse(rq.seq, debugger.get_stack_frames(**rq.kwargs)).set_seq(self.next_seq).send(self._current_client)
+            body = DAPThreadsResponseBody.create([DAPThread.create(0, "renpy_main")])
+            DAPThreadsResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
+        elif rq.command == u"stackTrace":
             self.next_seq += 1
-        elif rq.command == "scopes":
-            DAPScopesResponse(rq.seq, debugger.get_scopes(int(rq.kwargs["frameId"]))).set_seq(self.next_seq).send(self._current_client)
+            body = DAPStackTraceResponseBody.create(debugger.get_stack_frames(**rq.get_arguments().as_current_kwargs()))
+            DAPStackTraceResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
+        elif rq.command == u"scopes":
             self.next_seq += 1
-        elif rq.command == "variables":
-            DAPVariablesResponse(rq.seq, debugger.format_variable(**rq.kwargs)).set_seq(self.next_seq).send(self._current_client)
+            body = DAPScopesResponseBody.create(debugger.get_scopes(int(rq.get_arguments().get_frame_id())))
+            DAPScopesResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
+        elif rq.command == u"variables":
             self.next_seq += 1
-        elif rq.command == "pause":
-            DAPResponse(rq.seq, "pause").set_seq(self.next_seq).send(self._current_client)
+            body = DAPVariablesResponseBody.create(debugger.format_variable(**rq.get_arguments().as_current_kwargs()))
+            DAPVariablesResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
+        elif rq.command == u"pause":
             self.next_seq += 1
+            DAPPauseResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.break_pause = True
-        elif rq.command == "next":
-            DAPResponse(rq.seq, "next").set_seq(self.next_seq).send(self._current_client)
+        elif rq.command == u"next":
+            print("STEP")
             self.next_seq += 1
+            DAPNextResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_NEXT
             debugger.continue_next()
-        elif rq.command == "stepIn":
-            DAPResponse(rq.seq, "stepIn").set_seq(self.next_seq).send(self._current_client)
+        elif rq.command == u"stepIn":
             self.next_seq += 1
+            DAPStepInResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_INTO
             debugger.continue_next()
-        elif rq.command == "stepOut":
-            DAPResponse(rq.seq, "stepOut").set_seq(self.next_seq).send(self._current_client)
+        elif rq.command == u"stepOut":
             self.next_seq += 1
+            DAPStepOutResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_OUT
             debugger.continue_next()
         else:
-            DAPErrorResponse(rqs=rq.seq, command=rq.command, message="NotImplemented").set_seq(self.next_seq).send(self._current_client)
             self.next_seq += 1
+            DAPErrorResponse.create(self.next_seq, rq.seq, False, message="NotImplemented").send(self._current_client)
 
     def create_breakpoints(self, source, breakpoints=[], lines=[], sourceModified=False):
         """
         Creates breakpoints from request
         """
 
-        # print("Synchronizing breakpoints for source=%s, bkps=%s" % (str(source), str(breakpoints)))
-        path = source["path"]
+        print("Synchronizing breakpoints for source=%s, bkps=%s" % (str(source), str(breakpoints)))
+        path = source.path
         created_breakpoints = []
 
         debugger.clear_source_breakpoints(path)
 
         for bkp_info in breakpoints:
-            line = bkp_info["line"]
-            condition = bkp_info["condition"]
-            hit_condition = bkp_info["hitCondition"]
+            line = bkp_info.get_line()
+            condition = bkp_info.get_condition_or_default()
+            hit_condition = bkp_info.get_hit_condition_or_default()
             if hit_condition is not None:
                 hit_condition = int(hit_condition)
             # log message not suppored (yet?)
 
             breakpoint = Breakpoint(path, line, eval_condition=condition, counter=hit_condition)
+            print("Added breakpoint %s" % str(breakpoint))
             debugger.register_breakpoint(breakpoint)
             created_breakpoints.append(breakpoint)
 
@@ -866,10 +228,12 @@ class DebugAdapterProtocolServer(threading.Thread):
         Sends message to client that debug state has been paused
         """
 
-        DAPStoppedEvent(reason=debugger.pause_reason, description=debugger.frame_location_info(),
-                        thread_id=0, preserve_focus_hint=False,
-                        all_threads_stopped=True).set_seq(self.next_seq).send(self._current_client)
+        body = DAPStoppedEventBody.create(reason=debugger.pause_reason, description=debugger.frame_location_info(),
+                                          thread_id=0, preserve_focus_hint=False,
+                                          all_threads_stopped=True)
         self.next_seq += 1
+        DAPStoppedEvent.create(self.next_seq, body).send(self._current_client)
+
 
 
 class Breakpoint(object):
@@ -878,11 +242,14 @@ class Breakpoint(object):
     """
 
     def __init__(self, source, line, eval_condition=None, counter=None):
-        self.source = source
-        self.line = int(line) if isinstance(line, str) else line
+        self.source = source.encode("utf-8") if isinstance(source, unicode) else source
+        self.line = int(line) if isinstance(line, str) or isinstance(line, unicode) else line
         self.eval_condition = eval_condition
         self.counter = counter
         self.times_hit = 0
+
+    def __str__(self):
+        return "<breakpoint %s: %s (%s, %s, %s)>" % (self.source, str(self.line), str(self.eval_condition), str(self.counter), str(self.times_hit))
 
     def serialize(self):
         """
@@ -899,7 +266,6 @@ class Breakpoint(object):
         """
         Checks whether this breakpoint applies to this frame
         """
-
         if frame.f_code.co_filename == self.source and frame.f_lineno == self.line:
             # breakpoint hits, now try eval if it is eval
 
@@ -910,7 +276,7 @@ class Breakpoint(object):
                     if eval(self.eval_condition, frame.f_globals, frame.f_locals):
                         # so eval_passed is boolean not whatever eval returned, it is in separate if!
                         eval_passed = True
-                except:
+                except BaseException:
                     # eval failure, ignore
                     pass
 
@@ -1094,7 +460,7 @@ class RenpyPythonDebugger(object):
                 test_breakpoints = False
                 self.stepping = SteppingMode.STEP_SINGLE_EXEC
                 self.pause_reason = "stepOut"
-                return # exit evaluation
+                return  # exit evaluation
 
             # next will always break if this is line
             if self.stepping == SteppingMode.STEP_NEXT and self.active_frame is self.stored_frames[1] and event != "call":
@@ -1106,7 +472,7 @@ class RenpyPythonDebugger(object):
                 handler.pause_debugging()
 
         if event == "exception" or event == "call":
-            return # TODO: exceptions, calls
+            return  # TODO: exceptions, calls
 
         if test_breakpoints:
             # due to lock we move triggered breakpoint to here
@@ -1120,7 +486,7 @@ class RenpyPythonDebugger(object):
                         break
             if breaking_on is not None:
                 print("Broke at %s %s %s (%s))" % (event, "<File %s, Line %s>" % (frame.f_code.co_filename, frame.f_lineno), str(arg), str(id(threading.current_thread()))))
-                self.break_code(breaking_on) # sets this to blocking
+                self.break_code(breaking_on)  # sets this to blocking
 
         # check for external requested pause
         if self.break_pause:
@@ -1131,7 +497,7 @@ class RenpyPythonDebugger(object):
 
         while not self.cont:
             # spinlock when we are waiting for debugger
-            pass
+            time.sleep(0.1)
 
     def register_breakpoint(self, breakpoint):
         with self.bkp_lock:
@@ -1188,7 +554,7 @@ class RenpyPythonDebugger(object):
 
                 finfo["id"] = clevel
                 finfo["name"] = cframe.f_code.co_name + self.format_method_signature(cframe.f_locals, cframe.f_code)
-                finfo["source"] = {"path" : cframe.f_code.co_filename }
+                finfo["source"] = {"path": cframe.f_code.co_filename}
                 finfo["line"] = cframe.f_lineno
                 finfo["presentationHint"] = "normal"
                 finfo["column"] = 0
@@ -1388,144 +754,13 @@ class RenpyPythonDebugger(object):
         handler.send_breakpoint_event(breakpoint)
 
 
-# disassembler - sane one
-
-class DisElement(object):
-    """
-    holds disassembler instruction information
-    """
-
-    def __init__(self):
-        self.py_line = None
-        self.bytecode_offset = None
-        self.instruction = None
-        self.arg = None
-        self.readable_arg = None
-        self.current = False
-
-    # resulted object is (current, python_lineno, bytecode_offset, instruction, arg, constant)
-    def to_tuple(self):
-        """
-        returns information as tuple
-        """
-
-        return (self.current, self.py_line, self.bytecode_offset, self.instruction, self.arg, self.readable_arg)
-
-
-def dis(co, lasti=-1):
-    """
-    disassembles a code object into tuples
-    """
-
-    result = []
-
-    code = co.co_code
-    labels = findlabels(code)
-    linestarts = dict(findlinestarts(co))
-    n = len(code)
-    i = 0
-    extended_arg = 0
-    free = None
-    while i < n:
-        c = code[i]
-        op = ord(c)
-        de = DisElement()
-        result.append(de)
-
-        if i in linestarts:
-            de.python_lineno = linestarts[i]
-
-        de.current = i == lasti
-        de.bytecode_offset = i
-        de.instruction = opname[op]
-        i = i+1
-        if op >= HAVE_ARGUMENT:
-            oparg = ord(code[i]) + ord(code[i+1])*256 + extended_arg
-            extended_arg = 0
-            i = i+2
-            if op == EXTENDED_ARG:
-                extended_arg = oparg*65536L
-            de.arg = oparg
-
-
-            if op in hasconst:
-                de.readable_arg = co.co_consts[oparg]
-            elif op in hasname:
-                de.readable_arg = co.co_names[oparg]
-            elif op in hasjrel:
-                de.readable_arg = i + oparg
-            elif op in haslocal:
-                de.readable_arg = co.co_varnames[oparg]
-            elif op in hascompare:
-                de.readable_arg = cmp_op[oparg]
-            elif op in hasfree:
-                if free is None:
-                    free = co.co_cellvars + co.co_freevars
-                de.readable_arg = free[oparg]
-
-    r = [d.to_tuple() for d in result]
-    return r
-
-
-def findlabels(code):
-    """
-    detect all offsets in a byte code which are jump targets
-
-    return the list of offsets
-    """
-
-    labels = []
-    n = len(code)
-    i = 0
-    while i < n:
-        c = code[i]
-        op = ord(c)
-        i = i+1
-        if op >= HAVE_ARGUMENT:
-            oparg = ord(code[i]) + ord(code[i+1])*256
-            i = i+2
-            label = -1
-            if op in hasjrel:
-                label = i+oparg
-            elif op in hasjabs:
-                label = oparg
-            if label >= 0:
-                if label not in labels:
-                    labels.append(label)
-    return labels
-
-
-def findlinestarts(code):
-    """
-    find the offsets in a byte code which are start of lines in the source
-
-    generate pairs (offset, lineno) as described in Python/compile.c
-    """
-
-    byte_increments = [ord(c) for c in code.co_lnotab[0::2]]
-    line_increments = [ord(c) for c in code.co_lnotab[1::2]]
-
-    lastlineno = None
-    lineno = code.co_firstlineno
-    addr = 0
-    for byte_incr, line_incr in zip(byte_increments, line_increments):
-        if byte_incr:
-            if lineno != lastlineno:
-                yield (addr, lineno)
-                lastlineno = lineno
-            addr += byte_incr
-        lineno += line_incr
-    if lineno != lastlineno:
-        yield (addr, lineno)
-
-
 def wait_for_connection():
     """
     spinlock at early execution for debugger client to connect
     """
 
     while not handler.is_client_attached():
-        time.sleep(10) # spinlock
+        time.sleep(0.1)  # spinlock
 
 
 def attach():

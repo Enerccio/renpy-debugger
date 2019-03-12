@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import threading
@@ -5,461 +7,308 @@ import socket
 import json
 import readline
 import traceback
+import time
 
-from debugger import DAPMessage, debugger_port
-
-class Counter(object):
-    def __init__(self):
-        self.state = 0
-
-    def get(self):
-        s = self.state
-        self.state += 1
-        return s
-
-rq_counter = Counter()
-rq_arguments = {}
-
-class State(object):
-    @staticmethod
-    def load_state(stage=0, tid=0):
-        global state
-
-        if stage == 0:
-            state = State()
-            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"threads"}))
-        if stage == 1:
-            DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stackTrace", "arguments": {"threadId": tid, "startFrame": 0, "levels": 0}}))
-
-    @staticmethod
-    def load_scopes():
-        global state
-
-        DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"scopes", "arguments": {"frameId": state.active_stack}}))
-
-    def __init__(self):
-        self.threads = []
-        self.stacks = {}
-        self.active_stack = 0
-        self.locs = None
-        self.globs = None
-        self.vars = {}
-
-    def load_variable(self, vref):
-        if vref not in self.vars:
-            sq = rq_counter.get()
-            rq_arguments[sq] = vref
-            DAPMessage.send_text(s, json.dumps({"seq": sq, "command":"variables", "arguments": {"variablesReference": vref}}))
-        while vref not in self.vars:
-            pass
-        if self.vars[vref] is None:
-            print "Error retrieving variable %s" % str(vref)
-            del self.vars[vref]
-            return
-
-    def print_variable(self, vref):
-        if vref not in self.vars:
-            return
-
-        variables = self.vars[vref]
-        for v in variables:
-            fmt = "#%s: %s (%s)=%s"
-            if len(v["value"]) > 60:
-                # move to new line
-                "#%s: %s (%s)=\n  %s"
-            print fmt % (str(v["variablesReference"]), str(v["name"]), str(v["type"]), str(v["value"]))
+from librpydb.debugger import *
+from librpydb.baseconf import DEBUGGER_PORT as debugger_port
+from librpydb.utils import get_input
 
 
-class StackTraceElement(object):
-    def __init__(self):
-        self.id = None
-        self.name = None
-        self.source = "<unavailable>"
-        self.line = None
-        self.bytepos = None
-        self.sselements = []
+renpy_debugger = RenpyDebugger("127.0.0.1", debugger_port)
+execution_paused_state = None
+execution_threads = []
+executed_thread = None
+executed_stack_frames = None
+executed_stack_frame = None
+showing_variables = None
 
 
-class PrintingDAPMessage(threading.Thread):
-    def __init__(self, socket):
-        threading.Thread.__init__(self)
-        self.daemon = True
-
-        self.socket = socket
-        self.start()
-
-    def run(self):
-        global in_wait
-        global s
-
-        try:
-            while True:
-                request = DAPMessage.recv_raw(self.socket)
-                # print request
-
-                if request is None:
-                    print "Disconnected"
-                    return
-
-                if request["type"] == "response" and not request["success"]:
-                    if int(request["request_seq"]) in rq_arguments:
-                        parent_varref = rq_arguments[int(request["request_seq"])]
-                        self.vars[vref] = None
-                    print request["type"]["message"], request["type"]["body"]["error"]
-                elif request["type"] == "event":
-                    if request["event"] == "stopped":
-                        print "Stopped (" + request["body"]["reason"] + ")", request["body"]["description"]
-                        in_wait = True
-                        State.load_state(0)
-                elif request["type"] == "response":
-                    if request["command"] == "threads":
-                        for t in request["body"]["threads"]:
-                            state.threads.append((t["id"], t["name"]))
-                            State.load_state(1, tid=t["id"])
-                    elif request["command"] == "stackTrace":
-                        stacks = []
-                        for sf in request["body"]["stackFrames"]:
-                            st = StackTraceElement()
-                            st.id = sf["id"]
-                            st.name = sf["name"]
-                            st.source = sf["source"]["path"] if sf["source"] is not None else None
-                            st.line = sf["line"]
-                            st.bytepos = sf["subsourceElement"] if sf["subsourceElement"] is not None else None
-                            st.sselements = [x["text"] for x in sf["subsource"]["sources"]] if sf["subsource"] is not None else []
-                            stacks.append(st)
-                        state.stacks["0"] = stacks
-                        state.active_stack = 0
-                        state.locs = None
-                        state.globs = None
-                        state.vars = {}
-                        State.load_scopes()
-                    elif request["command"] == "scopes":
-                        state.locs = request["body"]["scopes"][0]
-                        state.globs = request["body"]["scopes"][1]
-                        state.vars = {}
-                    elif request["command"] == "variables":
-                        parent_varref = rq_arguments[int(request["request_seq"])]
-                        state.vars[parent_varref] = request["body"]["variables"]
+def connected(*args, **kwargs):
+    print("Connected!")
 
 
-        except BaseException as e:
-            # failure while communicating
-            traceback.print_exc()
+def disconnected(*args, **kwargs):
+    global execution_paused_state
+    print("Disconnected!")
+    execution_paused_state = None
 
-        finally:
-            s = None
 
-s = None
-in_wait = False
-state = None
+def paused(stop_reason, description, exc):
+    class IThread(threading.Thread):
+        def run(self):
+            global execution_paused_state, execution_threads, executed_thread, executed_stack_frames, executed_stack_frame
+            execution_paused_state = exc
+            execution_threads = exc.get_threads()
+            executed_thread = execution_threads[0]
+            executed_stack_frames = executed_thread.get_stack_frames()
+            executed_stack_frame = executed_stack_frames[0]
 
-breakpoints = set()
-removed = set()
+    t = IThread()
+    t.start()
+    print("Paused for %s (%s)" % (stop_reason, description))
 
-def mk_breakpoints():
-    source_map = {}
-    for src, line in breakpoints:
-        if src not in source_map:
-            source_map[src] = set()
-        source_map[src].add(line)
 
-    for src, line in removed:
-        if src not in source_map:
-            source_map[src] = set()
-    removed.clear()
+def client_error(*args, **kwargs):
+    pass
 
-    breakpoint_requests = []
-    for source in source_map:
-        req = {}
-        req["seq"] = rq_counter.get() # renpy debugger ignores seq anyways, but tries to be correct
-        req["command"] = "setBreakpoints"
-        args = {}
-        req["arguments"] = args
-        args["source"] = { "path": source }
-        args["breakpoints"] = [{"line": l} for l in source_map[source]]
 
-        display = "Installed breakpoints %s for source %s" %(str(source_map[source]), source)
-
-        breakpoint_requests.append((req, display))
-
-    return breakpoint_requests
+# setting callbacks
+renpy_debugger.set_connected_callback(connected)
+renpy_debugger.set_disconnected_callback(disconnected)
+renpy_debugger.set_client_error_callback(client_error)
+renpy_debugger.set_pause_callback(paused)
 
 
 while True:
     try:
-        data = raw_input("")
-        print ""
+        data = get_input(">>> ")
+        print("")
+
+        if data == "xxx":
+            print(globals())
 
         # always active commands
         if data == "h" or data == "help":
             #########
-            #### Help
+            # Help
             #########
-            print "Available commands:"
-            print "connect - connects to debugged renpy game on port 14711"
-            print "  will automatically sync breakpoints"
-            print "disconnect - stops debugging, but can still be attached later"
-            print "b - sets the breakpoint: b game/script.rpy:10"
-            print "rb - removes breakpoint - arguments can be source, source:line or nothing -> removes all"
-            print "lb - lists breakpoints"
-            print "sb - synchronized breakpoints"
-            print "threads - lists threads, renpy only supports thread 0"
-            print "bt - shows backtrace of thread"
-            print "st - st # - switch to stack frame #"
-            print "bytet - shows bytecode of current frame"
-            print "locals - shows all local variables"
-            print "globals - shows all global variables"
-            print "v # - displays subfields of variable #"
-            print "c - continue (with the) execution"
-            print "p - pauses execution wherever it is"
-            print "s - moves execution by next step"
-            print "si - moves execution into function call"
-            print "so - moves execution out of call"
-            print "OK"
+            print("Available commands:")
+            print("connect - connects to debugged renpy game on port 14711")
+            print("  will automatically sync breakpoints")
+            print("disconnect - stops debugging, but can still be attached later")
+            print("b - sets the breakpoint: b game/script.rpy:10")
+            print("rb - removes breakpoint - arguments can be source, source:line or nothing -> removes all")
+            print("lb - lists breakpoints")
+            print("sb - synchronized breakpoints")
+            print("threads - lists threads, renpy only supports thread 0")
+            print("bt - shows backtrace of thread")
+            print("st - st # - switch to stack frame #")
+            # print("bytet - shows bytecode of current frame")
+            print("scopes - shows scopes")
+            print("v # - displays subfields of variable # or lists variables in scopes")
+            print("c - continue (with the) execution")
+            print("p - pauses execution wherever it is")
+            print("s - moves execution by next step")
+            print("si - moves execution into function call")
+            print("so - moves execution out of call")
+            print("OK")
 
 
         elif data.startswith("b "):
             #######################
-            #### Install breakpoint
+            # Install breakpoint
             #######################
             try:
                 file, line = data[2:].split(":")
-                breakpoints.add((file, int(line)))
-                print "OK"
-            except:
-                print "Failed to insert breakpoint, check syntax"
+                renpy_debugger.add_breakpoint(Breakpoint(line, file))
+                print("OK")
+            except BaseException:
+                print("Failed to insert breakpoint, check syntax")
 
         elif data == "lb":
             #####################
-            #### List breakpoints
+            # List breakpoints
             #####################
-            for breakpoint_request, display in mk_breakpoints():
-                print display
-            print "OK"
+            for breakpoint in renpy_debugger.breakpoints:
+                print("Breakpoint at %s, line %s" % (breakpoint.source, breakpoint.line))
+            print("OK")
 
         elif data.startswith("rb"):
             #######################
-            #### Remove breakpoints
+            # Remove breakpoints
             #######################
             if data == "rb":
-                for bksrc, bkline in breakpoints:
-                    removed.add((bksrc, bkline))
-
-                breakpoints.clear()
-                print "All breakpoints removed"
+                renpy_debugger.clear_breakpoints()
+                print("All breakpoints removed")
             else:
                 rest = data[3:]
                 if ":" in rest:
                     file, line = rest.split(":")
-                    for bksrc, bkline in breakpoints:
-                        if bksrc == file and bkline == line:
-                            breakpoints.remove((bksrc, bkline))
-                            removed.add((bksrc, bkline))
-                            print "Removed breakpoint %s:%s" %(str(bksrc), str(bkline))
-                            break
+                    renpy_debugger.remove_breakpoint(Breakpoint(line, file))
                 else:
-                    ab = set()
-                    for bksrc, bkline in breakpoints:
-                        if bksrc == rest:
-                            print "Removed breakpoint %s:%s" %(str(bksrc), str(bkline))
-                            removed.add((bksrc, bkline))
-                        else:
-                            ab.add((bksrc, bkline))
-                    breakpoints = ab
-            print "Don't forget to 'sb' to synchronize breakpoints!"
-            print "OK"
+                    renpy_debugger.remove_breakpoint_from_source(rest)
+            print("Don't forget to 'sb' to synchronize breakpoints!")
+            print("OK")
 
-        elif data.startswith("{"):
-            #######################
-            #### Raw request
-            #######################
-            DAPMessage.send_text(s, data)
-            print "OK"
-
-        elif s is None:
+        elif renpy_debugger.get_state() == DebuggerState.NOT_CONNECTED:
             # no connection commands
             if data == "connect":
                 #############################
-                #### Connect to debugged game
+                # Connect to debugged game
                 #############################
-                print "Establishing connection"
+                print("Establishing connection")
 
                 try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.connect(("127.0.0.1", debugger_port))
-                    PrintingDAPMessage(s)
-                except:
-                    print "Failed. Is renpy debugged game running?"
-                    s = None
-                    continue
+                    renpy_debugger.connect()
+                except Exception:
+                    print("Failed. Is renpy debugged game running?")
 
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"initialize"}))
-                for breakpoint_request, display in mk_breakpoints():
-                    DAPMessage.send_text(s, json.dumps(breakpoint_request))
-                    print display
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"configurationDone"}))
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"launch"}))
-                print "Connected!"
-                print "OK"
+                print("OK")
 
         else:
             # connected
             if data == "sb":
                 ############################
-                #### Synchronize breakpoints
+                # Synchronize breakpoints
                 ############################
-                for breakpoint_request, display in mk_breakpoints():
-                    DAPMessage.send_text(s, json.dumps(breakpoint_request))
-                    print display
-                print "OK"
+                if renpy_debugger.get_state() == DebuggerState.CONNECTED or renpy_debugger.get_state() == DebuggerState.CONNECTING:
+                    print("Not connected")
+                else:
+                    renpy_debugger.sync_breakpoints()
+                    print("OK")
 
-            elif data == "threads" and state is not None:
+            elif data == "threads" and execution_paused_state is not None and execution_paused_state.is_valid():
                 #################
-                #### List threads
+                # List threads
                 #################
-                print "Threads:"
-                for t in state.threads:
-                    print "Threads #%s: %s" % (str(t[0]), t[1])
-                print "OK"
+                execution_threads = execution_paused_state.get_threads()
 
-            elif data.startswith("bt") and state is not None:
+                print("Threads:")
+                it = 0
+                for renpy_thread in execution_threads:
+                    print("Threads #%s: %s" % (str(it), renpy_thread.get_thread_name()))
+                    it += 1
+                print("OK")
+
+            elif data.startswith("bt") and execution_paused_state is not None and execution_paused_state.is_valid():
                 ###################
-                #### Show backtrace
+                # Show backtrace
                 ###################
                 try:
                     if data == "bt":
                         thread_id = "0"
                     else:
                         thread_id = data[3:]
-                    print "Backtrace for thread [%s]" % thread_id
+                except BaseException:
+                    print("Failed to display bt, check syntax")
 
-                    if thread_id not in state.stacks:
-                        print "No thread %s available" % thread_id
-                    else:
-                        for st in state.stacks[thread_id]:
-                            print "#%s: <%s:%s> %s " % (st.id, st.source, str(st.line), st.name)
-                    print "OK"
-                except:
-                    print "Failed to display bt, check syntax"
+                if int(thread_id) >= len(execution_threads):
+                    print("No thread %s available" % thread_id)
+                else:
+                    print("Backtrace for thread [%s]" % thread_id)
+                    executed_thread = execution_threads[int(thread_id)]
+                    executed_stack_frames = executed_thread.get_stack_frames()
+                    id = 0
+                    for st in executed_stack_frames:
+                        print("#%s: <%s:%s> %s " % (str(id), st.get_source(), str(st.get_line()), st.get_line_of_code()))
+                        id += 1
+                print("OK")
 
-            elif data.startswith("bytet") and state is not None:
+
+#             elif data.startswith("bytet") and state is not None:
                 #############################
-                #### List bytecode for method
+                # List bytecode for method
                 #############################
-                st = state.stacks["0"][state.active_stack]
-                print "Bytecode of stack frame #%s: <%s:%s> %s  "  % (st.id, st.source, str(st.line), st.name)
-                i = 0
-                for bytecode in st.sselements:
-                    if i == st.bytepos:
-                        print "* ",
-                    print bytecode
-                    i += 1
-                print "OK"
+#                st = state.stacks["0"][state.active_stack]
+#                print("Bytecode of stack frame #%s: <%s:%s> %s  " % (st.id, st.source, str(st.line), st.name))
+#                i = 0
+#                for bytecode in st.sselements:
+#                    if i == st.bytepos:
+#                        print("* ", end="")
+#                        print(bytecode)
+#                        i += 1
+#                print("OK")
 
-            elif (data == "st" or data.startswith("st ")) and state is not None:
+
+            elif (data == "st" or data.startswith("st ")) and executed_thread is not None and executed_thread.is_valid():
                 #######################
-                #### Switch stack frame
+                # Switch stack frame
                 #######################
+                stid = 0
                 if data == "st":
-                    state.active_stack = 0
-                    state.locs = None
-                    state.globs = None
-                    state.vars = {}
-                    State.load_scopes()
+                    stid = 0
                 else:
                     try:
-                        state.active_stack = int(data[3:])
-                        if state.active_stack >= len(state.stacks["0"]):
-                            print "Invalid stack frame number, set to " + str(len(state.stacks["0"]) - 1)
-                            state.active_stack = len(state.stacks["0"]) - 1
-                        state.locs = None
-                        state.globs = None
-                        state.vars = {}
-                        State.load_scopes()
-                    except:
-                        print "Failed to set active stack frame, check syntax"
-                st = state.stacks["0"][state.active_stack]
-                print "Set stack to #%s: <%s:%s> %s  "  % (st.id, st.source, str(st.line), st.name)
-                print "OK"
+                        stid = int(data[3:])
+                    except BaseException:
+                        print("Failed to set active stack frame, check syntax")
+                if stid >= len(executed_stack_frames):
+                    print("No such stack frame %s" % (str(stid)))
+                else:
+                    executed_stack_frame = executed_stack_frames[stid]
+                    executed_stack_frame.set_active()
+                    print("#%s: <%s:%s> %s " % (str(stid), executed_stack_frame.get_source(), str(executed_stack_frame.get_line()), executed_stack_frame.get_line_of_code()))
+                print("OK")
 
-            elif data == "locals" and state is not None:
+            elif data == "scopes" and executed_stack_frame is not None and executed_stack_frame.is_valid():
                 ###################
-                #### Display locals
+                # Display locals, globas
                 ###################
-                state.load_variable(state.locs["variablesReference"])
-                state.print_variable(state.locs["variablesReference"])
-                print "OK"
 
-            elif data == "globals" and state is not None:
-                ####################
-                #### Display globals
-                ####################
-                state.load_variable(state.globs["variablesReference"])
-                state.print_variable(state.globs["variablesReference"])
-                print "OK"
+                showing_variables = executed_stack_frame.get_scopes()
+                it = 0
+                for v in showing_variables:
+                    print("#%s: %s (%s) - %s" % (str(it), v.get_name(), v.get_type(), v.get_value()))
+                    it += 1
+                print("OK")
 
             elif data.startswith("v "):
                 ###############################
-                #### Display variable structure
+                # Display variable structure
                 ###############################
                 try:
-                    varRef = int(data[2:])
-                except:
-                    print "Failed to get variable, check syntax"
+                    var_ref = int(data[2:])
+                except BaseException:
+                    print("Failed to get variable, check syntax")
                 else:
-                    state.load_variable(varRef)
-                    state.print_variable(varRef)
-                    print "OK"
+                    if var_ref >= len(showing_variables):
+                        print("No such variable %s" % (str(var_ref)))
+                    else:
+                        showing_variables = list(showing_variables[var_ref].get_components().values())
+                        it = 0
+                        for v in showing_variables:
+                            print("#%s: %s (%s) - %s" % (str(it), v.get_name(), v.get_type(), v.get_value()))
+                            it += 1
+                        print("OK")
 
-            elif data.startswith("c") and in_wait:
+            elif data.startswith("c") and executed_thread is not None and executed_thread.is_valid():
                 #######################
-                #### Continue execution
+                # Continue execution
                 #######################
-                state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"continue", "arguments":{"threadId":0}}))
-                print "OK"
+                exct = executed_thread
+                executed_thread = None
+                exct.continue_execution()
+                print("OK")
 
-            elif data.startswith("p") and not in_wait:
+            elif data.startswith("p") and renpy_debugger.get_state() == DebuggerState.CONNECTED:
                 ####################
-                #### Pause execution
+                # Pause execution
                 ####################
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"pause", "arguments":{"threadId":0}}))
-                print "OK"
+                renpy_debugger.pause()
+                print("OK")
 
-            elif data == "s" and in_wait:
+            elif data == "s" and executed_thread is not None and executed_thread.is_valid():
                 ###################
-                #### Step execution
+                # Step execution
                 ###################
-                state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"next", "arguments":{"threadId":0}}))
-                print "OK"
+                executed_thread.step()
+                print("OK")
 
-            elif data == "si" and in_wait:
+            elif data == "si" and executed_thread is not None and executed_thread.is_valid():
                 ###################
-                #### Step into exec
+                # Step into exec
                 ###################
-                state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stepIn", "arguments":{"threadId":0}}))
-                print "OK"
+                executed_thread.step_in()
+                print("OK")
 
-            elif data == "so" and in_wait:
+            elif data == "so" and executed_thread is not None and executed_thread.is_valid():
                 ##################
-                #### Step out exec
+                # Step out exec
                 ##################
-                state = None
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"stepOut", "arguments":{"threadId":0}}))
-                print "OK"
+                executed_thread.step_out()
+                print("OK")
 
-            elif data == "disconnect":
+            elif data == "disconnect" and renpy_debugger.get_state() != DebuggerState.NOT_CONNECTED:
                 ###############
-                #### Disconnect
+                # Disconnect
                 ###############
-                DAPMessage.send_text(s, json.dumps({"seq": rq_counter.get(), "command":"disconnect", "arguments":{"threadId":0}}))
-                print "OK"
+                renpy_debugger.disconnect()
+                print("OK")
 
     except BaseException as e:
         if isinstance(e, KeyboardInterrupt):
+            traceback.print_exc()
             break
 
-        print "Oops, something went wrong."
+        print("Oops, something went wrong.")
         traceback.print_exc()
