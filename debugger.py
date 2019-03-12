@@ -126,75 +126,75 @@ class DebugAdapterProtocolServer(threading.Thread):
             self.next_seq += 1
             bkps = self.create_breakpoints(**rq.get_arguments().as_current_kwargs())
             body = DAPSetBreakpointsResponseBody.create([b.serialize() for b in bkps])
-            DAPSetBreakpointsResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPSetBreakpointsResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
         elif rq.command == "configurationDone":
             self.next_seq += 1
-            DAPConfigurationDoneResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
-            self._ready_for_events = True
+            DAPConfigurationDoneResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
         elif rq.command == "launch":
             # no special noDebug
             self.next_seq += 1
-            DAPLaunchResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPLaunchResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
+            self._ready_for_events = True
         elif rq.command == "disconnect":
             self.next_seq += 1
-            DAPDisconnectResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPDisconnectResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             self._current_client.close()
             self._current_client = None
             return
         elif rq.command == "continue":
             self.next_seq += 1
             body = DAPContinueResponseBody.create(all_threads_continued=True)
-            DAPContinueResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPContinueResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
             debugger.stepping = SteppingMode.STEP_NO_STEP
             debugger.continue_next()
         elif rq.command == "threads":
             self.next_seq += 1
             body = DAPThreadsResponseBody.create([DAPThread.create(0, "renpy_main")])
-            DAPThreadsResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPThreadsResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
         elif rq.command == "stackTrace":
             self.next_seq += 1
             body = DAPStackTraceResponseBody.create(debugger.get_stack_frames(**rq.get_arguments().as_current_kwargs()))
-            DAPStackTraceResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPStackTraceResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
         elif rq.command == "scopes":
             self.next_seq += 1
             body = DAPScopesResponseBody.create(debugger.get_scopes(int(rq.get_arguments().get_frame_id())))
-            DAPScopesResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPScopesResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
         elif rq.command == "variables":
             self.next_seq += 1
             body = DAPVariablesResponseBody.create(debugger.format_variable(**rq.get_arguments().as_current_kwargs()))
-            DAPVariablesResponse.create(self.next_seq, rq.seq, True, rq.command, body).send(self._current_client)
+            DAPVariablesResponse.create(self.next_seq, rq.seq, True, body).send(self._current_client)
         elif rq.command == "pause":
             self.next_seq += 1
-            DAPPauseResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPPauseResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.break_pause = True
         elif rq.command == "next":
             self.next_seq += 1
-            DAPNextResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPNextResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_NEXT
             debugger.continue_next()
         elif rq.command == "stepIn":
             self.next_seq += 1
-            DAPStepInResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPStepInResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_INTO
             debugger.continue_next()
         elif rq.command == "stepOut":
             self.next_seq += 1
-            DAPStepOutResponse.create(self.next_seq, rq.seq, True, rq.command).send(self._current_client)
+            DAPStepOutResponse.create(self.next_seq, rq.seq, True).send(self._current_client)
             debugger.store_frames()
             debugger.stepping = SteppingMode.STEP_OUT
             debugger.continue_next()
         else:
             self.next_seq += 1
-            DAPErrorResponse.create(self.next_seq, rq.seq, False, rq.command, message="NotImplemented").send(self._current_client)
+            DAPErrorResponse.create(self.next_seq, rq.seq, False, message="NotImplemented").send(self._current_client)
 
     def create_breakpoints(self, source, breakpoints=[], lines=[], sourceModified=False):
         """
         Creates breakpoints from request
         """
 
-        # print("Synchronizing breakpoints for source=%s, bkps=%s" % (str(source), str(breakpoints)))
+        print("Synchronizing breakpoints for source=%s, bkps=%s" % (str(source), str(breakpoints)))
         path = source.path
         created_breakpoints = []
 
@@ -202,8 +202,8 @@ class DebugAdapterProtocolServer(threading.Thread):
 
         for bkp_info in breakpoints:
             line = bkp_info.get_line()
-            condition = bkp_info.get_condition_or_defaut()
-            hit_condition = bkp_info.get_hit_condition_or_defaut()
+            condition = bkp_info.get_condition_or_default()
+            hit_condition = bkp_info.get_hit_condition_or_default()
             if hit_condition is not None:
                 hit_condition = int(hit_condition)
             # log message not suppored (yet?)
@@ -487,9 +487,12 @@ class RenpyPythonDebugger(object):
             self.cont = False
             handler.pause_debugging()
 
+        self.wait_for_continue()
+
+    def wait_for_continue(self):
         while not self.cont:
             # spinlock when we are waiting for debugger
-            pass
+            time.sleep(0.1)
 
     def register_breakpoint(self, breakpoint):
         with self.bkp_lock:
@@ -546,7 +549,7 @@ class RenpyPythonDebugger(object):
 
                 finfo["id"] = clevel
                 finfo["name"] = cframe.f_code.co_name + self.format_method_signature(cframe.f_locals, cframe.f_code)
-                finfo["source"] = {"path": cframe.f_code.co_filename }
+                finfo["source"] = {"path": cframe.f_code.co_filename}
                 finfo["line"] = cframe.f_lineno
                 finfo["presentationHint"] = "normal"
                 finfo["column"] = 0
@@ -752,7 +755,7 @@ def wait_for_connection():
     """
 
     while not handler.is_client_attached():
-        time.sleep(10)  # spinlock
+        time.sleep(0.1)  # spinlock
 
 
 def attach():

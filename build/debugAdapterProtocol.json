@@ -548,6 +548,10 @@
 				"type": "object",
 				"description": "Response to 'runInTerminal' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "runInTerminal" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -562,7 +566,7 @@
 						}
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -636,11 +640,16 @@
 				"type": "object",
 				"description": "Response to 'initialize' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "initialize" ]
+					},
 					"body": {
 						"$ref": "#/definitions/Capabilities",
 						"description": "The capabilities of this debug adapter."
 					}
-				}
+				},
+				"required": ["command"]
 			}]
 		},
 
@@ -667,7 +676,14 @@
 		"ConfigurationDoneResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'configurationDone' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'configurationDone' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "configurationDone" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -704,7 +720,14 @@
 		"LaunchResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'launch' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'launch' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "launch" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -737,7 +760,14 @@
 		"AttachResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'attach' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'attach' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "attach" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -764,7 +794,14 @@
 		"RestartResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'restart' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'restart' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "restart" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -801,7 +838,14 @@
 		"DisconnectResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'disconnect' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'disconnect' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "disconnect" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -834,7 +878,14 @@
 		"TerminateResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'terminate' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'terminate' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "terminate" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -888,6 +939,10 @@
 				"type": "object",
 				"description": "Response to 'setBreakpoints' request.\nReturned is information about each breakpoint created by this request.\nThis includes the actual code location and whether the breakpoint could be verified.\nThe breakpoints returned are in the same order as the elements of the 'breakpoints'\n(or the deprecated 'lines') array in the arguments.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setBreakpoints" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -902,7 +957,7 @@
 						"required": [ "breakpoints" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -941,6 +996,10 @@
 				"type": "object",
 				"description": "Response to 'setFunctionBreakpoints' request.\nReturned is information about each breakpoint created by this request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setFunctionBreakpoints" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -955,7 +1014,7 @@
 						"required": [ "breakpoints" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -999,7 +1058,14 @@
 		"SetExceptionBreakpointsResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'setExceptionBreakpoints' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'setExceptionBreakpoints' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setExceptionBreakpoints" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1039,6 +1105,10 @@
 				"type": "object",
 				"description": "Response to 'dataBreakpointInfo' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "dataBreakpointInfo" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1065,7 +1135,7 @@
 						"required": [ "dataId", "description" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1104,6 +1174,10 @@
 				"type": "object",
 				"description": "Response to 'setDataBreakpoints' request.\nReturned is information about each breakpoint created by this request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setDataBreakpoints" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1118,7 +1192,7 @@
 						"required": [ "breakpoints" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1154,6 +1228,10 @@
 				"type": "object",
 				"description": "Response to 'continue' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "continue" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1164,7 +1242,7 @@
 						}
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1198,10 +1276,17 @@
 		"NextResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'next' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'next' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "next" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
-		
+
 		"SetStepGranularityRequest": {
 			"allOf": [ { "$ref": "#/definitions/Request" }, {
 				"type": "object",
@@ -1216,7 +1301,7 @@
 					}
 				},
 				"required": [ "command", "arguments"  ]
-			}]	
+			}]
 		},
 		"SetStepGranularityArguments": {
 			"type": "object",
@@ -1235,6 +1320,10 @@
 				"type": "object",
 				"description": "Response to 'setStepGranularity' request. Debugger might return other granularity if some granularity is not possible.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setStepGranularity" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1247,10 +1336,10 @@
 				  		"required": [ "granularity" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
-		
+
 
 		"StepInRequest": {
 			"allOf": [ { "$ref": "#/definitions/Request" }, {
@@ -1286,7 +1375,14 @@
 		"StepInResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'stepIn' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'stepIn' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "stepIn" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1320,7 +1416,14 @@
 		"StepOutResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'stepOut' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'stepOut' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "stepOut" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1354,7 +1457,14 @@
 		"StepBackResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'stepBack' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'stepBack' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "stepBack" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1388,7 +1498,14 @@
 		"ReverseContinueResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'reverseContinue' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'reverseContinue' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "reverseContinue" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1422,7 +1539,14 @@
 		"RestartFrameResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'restartFrame' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'restartFrame' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "restartFrame" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1460,7 +1584,14 @@
 		"GotoResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'goto' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'goto' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "goto" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1494,7 +1625,14 @@
 		"PauseResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'pause' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'pause' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "pause" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1542,6 +1680,10 @@
 				"type": "object",
 				"description": "Response to 'stackTrace' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "stackTrace" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1560,7 +1702,7 @@
 						"required": [ "stackFrames" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1596,6 +1738,10 @@
 				"type": "object",
 				"description": "Response to 'scopes' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "scopes" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1610,7 +1756,7 @@
 						"required": [ "scopes" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1663,6 +1809,10 @@
 				"type": "object",
 				"description": "Response to 'variables' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "variables" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1677,7 +1827,7 @@
 						"required": [ "variables" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1725,6 +1875,10 @@
 				"type": "object",
 				"description": "Response to 'setVariable' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setVariable" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1752,7 +1906,7 @@
 						"required": [ "value" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1792,6 +1946,10 @@
 				"type": "object",
 				"description": "Response to 'source' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "sourceReference" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1807,7 +1965,7 @@
 						"required": [ "content" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1829,6 +1987,10 @@
 				"type": "object",
 				"description": "Response to 'threads' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "threads" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1843,7 +2005,7 @@
 						"required": [ "threads" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1879,7 +2041,14 @@
 		"TerminateThreadsResponse": {
 			"allOf": [ { "$ref": "#/definitions/Response" }, {
 				"type": "object",
-				"description": "Response to 'terminateThreads' request. This is just an acknowledgement, so no body field is required."
+				"description": "Response to 'terminateThreads' request. This is just an acknowledgement, so no body field is required.",
+				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "launch" ]
+					}
+				},
+				"required": [ "command" ]
 			}]
 		},
 
@@ -1918,6 +2087,10 @@
 				"type": "object",
 				"description": "Response to 'modules' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "modules" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1936,7 +2109,7 @@
 						"required": [ "modules" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -1965,6 +2138,10 @@
 				"type": "object",
 				"description": "Response to 'loadedSources' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "loadedSources" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -1979,7 +2156,7 @@
 						"required": [ "sources" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2033,6 +2210,10 @@
 				"type": "object",
 				"description": "Response to 'evaluate' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "evaluate" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2064,7 +2245,7 @@
 						"required": [ "result", "variablesReference" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2112,6 +2293,10 @@
 				"type": "object",
 				"description": "Response to 'setExpression' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "setExpression" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2143,7 +2328,7 @@
 						"required": [ "value" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2179,6 +2364,10 @@
 				"type": "object",
 				"description": "Response to 'stepInTargets' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "stepInTargets" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2193,7 +2382,7 @@
 						"required": [ "targets" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2237,6 +2426,10 @@
 				"type": "object",
 				"description": "Response to 'gotoTargets' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "gotoTargets" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2251,7 +2444,7 @@
 						"required": [ "targets" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2299,6 +2492,10 @@
 				"type": "object",
 				"description": "Response to 'completions' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "completions" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2313,7 +2510,7 @@
 						"required": [ "targets" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2349,6 +2546,10 @@
 				"type": "object",
 				"description": "Response to 'exceptionInfo' request.",
 				"properties": {
+					"command": {
+						"type": "string",
+						"enum": [ "exceptionInfo" ]
+					},
 					"body": {
 						"type": "object",
 						"properties": {
@@ -2372,7 +2573,7 @@
 						"required": [ "exceptionId", "breakMode" ]
 					}
 				},
-				"required": [ "body" ]
+				"required": [ "command", "body" ]
 			}]
 		},
 
@@ -2713,7 +2914,7 @@
 				}
 			}
 		},
-		
+
 		"Subsource": {
 			"type": "object",
 			"description": "Subsource is the actual representation of source at finest possible granularity. It can be used to send decompiled or bytecode information.",
@@ -2728,7 +2929,7 @@
 			},
 			"required": [ "elements" ]
 		},
-		
+
 		"SubsourceElement": {
 			"type": "object",
 			"description": "Represents single finest possible step for step operation.",

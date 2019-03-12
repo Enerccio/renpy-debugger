@@ -39,7 +39,8 @@ class Superclass(object):
 
 def to_snake(name):
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    r = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    return r.replace("__", "_")
 
 
 def generate(path):
@@ -96,13 +97,26 @@ def generate(path):
         print("", file=t)
         print("@staticmethod", file=t)
         print("def _determine_root_factory(data):", file=t)
+
+        conds = []
+
         for cls in leafs:
             if cls.determinate is not None and len(cls.determinate) > 0:
                 conditions = []
                 for d in cls.determinate:
-                    conditions.append("data[\"%s\"] == %s" % d)
-                print("    if %s:" % " and ".join(conditions), file=t)
-                print("        return %s" % cls.name, file=t)
+                    conditions.append(d)
+                conds.append((cls, conditions))
+
+        def llen(x):
+            return len(x[1])
+        conds = reversed(sorted(conds, key=llen))
+
+        for cls, cd in conds:
+            conditions = []
+            for d in cd:
+                conditions.append("data[\"%s\"] == %s" % d)
+            print("    if %s:" % " and ".join(conditions), file=t)
+            print("        return %s" % cls.name, file=t)
         print("    raise ValueError(\"unknown entity to factory binding \" + str(data))", file=t)
 
         print("", file=t)
@@ -311,7 +325,7 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                 print("            raise ValueError(\"%s is not defined\")" % p.name, file=t)
                 print("        return self.%s" % p.name, file=t)
                 print("    ", file=t)
-                print("    def get_%s_or_defaut(self, default=None):" % to_snake(p.name), file=t)
+                print("    def get_%s_or_default(self, default=None):" % to_snake(p.name), file=t)
                 print("        if self.%s is __undefined__:" % p.name, file=t)
                 print("            return default", file=t)
                 print("        return self.%s" % p.name, file=t)
@@ -344,7 +358,10 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                 else:
                     print("                self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
             else:
-                print("            self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
+                if p.arrayref is not None:
+                    print("            self.serialize_scalar(me, \"%s\", self.%s, hint=%s)" % (p.name, p.name, p.arrayref), file=t)
+                else:
+                    print("            self.serialize_scalar(me, \"%s\", self.%s)" % (p.name, p.name), file=t)
         else:
             if p.name not in required:
                 print("            if self.%s is not __undefined__:" % p.name, file=t)
@@ -377,7 +394,10 @@ def generate_object(t, name, base_class, description, definition, supers, all):
                 else:
                     print("                kwargs[\"%s\"] = cls.deserialize_scalar(me[\"%s\"])" % (to_snake(p.name), p.name), file=t)
             else:
-                print("            args.append(cls.deserialize_scalar(me[\"%s\"]))" % p.name, file=t)
+                if p.arrayref is not None:
+                    print("            args.append(cls.deserialize_scalar(me[\"%s\"], hint=%s))" % (p.name, p.arrayref), file=t)
+                else:
+                    print("            args.append(cls.deserialize_scalar(me[\"%s\"]))" % p.name, file=t)
         else:
             if p.name not in required:
                 print("            if me is not None and \"%s\" in me:" % p.name, file=t)
