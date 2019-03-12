@@ -119,8 +119,6 @@ class DebugAdapterProtocolServer(threading.Thread):
         Resolves the message from client, changing debug state as appropriate, returning responses
         """
 
-        print("%s %s" % (rq.command, str(type(rq.command))))
-
         if rq.command == u"initialize":
             self.next_seq += 1
             DAPInitializeResponse.create(self.next_seq, rq.seq, True, rq.command, body=DAPCapabilities.create(**features)).send(self._current_client)
