@@ -752,12 +752,12 @@ class RenpyPythonDebugger(object):
         handler.send_breakpoint_event(breakpoint)
 
 
-def wait_for_connection():
+def wait_for_connection(no_wait):
     """
     spinlock at early execution for debugger client to connect
     """
 
-    while not handler.is_client_attached():
+    while not no_wait and not handler.is_client_attached():
         time.sleep(0.1)  # spinlock
 
 
@@ -769,7 +769,6 @@ def attach():
     handler = DebugAdapterProtocolServer()
 
     # TODO
-    # no_wait = "RENPY_DEBUGGER_NOWAIT" in os.environ and os.environ["RENPY_DEBUGGER_NOWAIT"] == "true"
+    no_wait = "RENPY_DEBUGGER_NOWAIT" in os.environ and os.environ["RENPY_DEBUGGER_NOWAIT"] == "True"
     debugger.attach()
-    no_wait = False
-    wait_for_connection()
+    wait_for_connection(no_wait)
